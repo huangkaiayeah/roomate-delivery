@@ -3,13 +3,21 @@ const CONFIG = {
   recipient: "阿如",
   sender: "KU",
   city: "日本橫濱",
-  parts: ["7129", "0453", "1106"], // tracking number pieces, in the same order as TASKS
+  parts: ["0719", "2829", "1106"], // tracking number pieces, in the same order as TASKS
   unlockAt: "2026-11-06T00:00:00+09:00", // midnight Japan time
+  version: "1.5.1", // shown in the footer; raise it with each upload
+};
+
+// Search page wording
+const HOME = {
+  notice: `${CONFIG.recipient} 君：您有一件代領取之國際包裹。包裹號碼因寄件人失誤暫且遺失，須由收件人協助完成運輸追蹤，以覓得包裹之完整號碼。`,
+  ladder: "爬梯子抽路線",
+  ladderStart: "將透過爬梯子方式，隨機解鎖一段包裹運送路線。",
 };
 
 // The three tasks at the bottom of the ladder. Each one gives one tracking number piece and one card.
 const TASKS = {
-  eat: { n: 0, title: "搶救煎餃任務", desc: "30 秒內，用筷子夾到並吃完 8 顆煎餃" },
+  eat: { n: 0, title: "8包煎餃拼到底", desc: "30 秒內，用筷子夾到並吃完 8 顆煎餃" },
   open: { n: 1, title: "急件開箱任務", desc: "報稅期間來了一箱客戶急件，請立即處理" },
   match: { n: 2, title: "三牲連連看", desc: "收集散落各處的雞、豬、魚，放回正確的位置" },
 };
@@ -27,6 +35,8 @@ const FRY = {
     bun: { name: "水煎包", ready: 5, burnt: 7, gone: 7.5 },
   },
   intro: "三位廚師會隨機下鍋煎餃、小籠包和水煎包。煎熟後點一下，用筷子夾起來吃掉。30 秒內吃完 8 顆煎餃就過關，燒焦的不算數。",
+  // The animated legend above 開始: each food cycles through these three looks.
+  states: { raw: "還沒熟", ready: "熟了", burnt: "臭火搭" },
   start: "開始",
   retry: "再來一次",
   raw: "還沒熟！",
@@ -189,13 +199,12 @@ const OFFICES = {
     title: "宿舍郵局",
     en: "Dorm Post Office",
     hero: "", // e.g. "assets/dorm.jpg"
-    caption: "【一句宿舍回憶】",
-    branches: ["【你們的房號】支局", "交誼廳支局", "洗衣間支局"],
+    caption: "噹~噹~噹~噹~~每天配著北大高中的鐘聲起床，又是美好的一天。",
+    branches: ["北大愛悅支局", "客廳支局", "廚房支局"],
     news: [
       ["115/11/06", "本局今日有壽星到局，請各支局提高音量"],
-      ["【日期】", "【一則真實的宿舍回憶】"],
+      ["108/12/28", `【${CONFIG.recipient}特別提醒】赴韓參加12/31 EXO演唱會之航班為凌晨5點，請${CONFIG.sender}出門前再次默念：手機錢包護照鑰匙！`],
     ],
-    praise: [["室友來函", "【你想對她說的一句話】"]],
     services: [
       { icon: "✉", name: "郵件", options: [{ label: "待領信件", text: "查無信件。這年頭只有寄件人會寄奇怪的東西給您。" }, { label: "晚間投遞", text: "本局晚間只投遞宵夜。" }] },
       { icon: "?", name: "失物招領", options: [{ label: "一疊宵夜收據", text: "收據已褪色，但熱量仍在。" }, { label: "一把剪刀", tool: "scissors" }, { label: "一雙不成對的拖鞋", text: "另一隻下落不明。" }] },
@@ -210,12 +219,15 @@ const OFFICES = {
             correct: "a",
           },
         }] },
-      { icon: "$", name: "計價", options: [{ label: "室友欠款查詢", text: "【一筆你們之間的欠款笑話】" }, { label: "存款利率", text: "本局利率依友情浮動。" },
+      { icon: "$", name: "計價", options: [{ label: "室友欠款查詢", text: `比起${CONFIG.recipient}，寄件人比較常因為忘帶錢包欠款(汗💦)
+一天又平安的過去了，感謝室友錢包的努力！` }, { label: "存款利率", text: "本局利率依友情浮動。" },
         {
           label: "燒餅價目查詢",
           icon: "pork1",
           ask: {
             question: "請問東區圍爐酸菜白肉鍋的燒餅多少摳？",
+            img: "assets/shaobing.jpg", // shown under the question
+            alt: "一盤兩個撒滿芝麻的燒餅，後面是酸菜白肉鍋",
             answer: ["70", "seventy", "七十", "柒拾"],
             hints: ["兩位數，比 60 多、比 80 少。"],
           },
@@ -223,7 +235,7 @@ const OFFICES = {
     ],
     faq: [
       ["晚歸需要先報備嗎？", "室友已經睡了，請放輕腳步。"],
-      ["【一個只有你們懂的問題】", "【答案】"],
+      ["BoA最新發行的日專(2026/11/25)的專輯名稱是？", "歩幅"],
     ],
     charity: [
       ["【在地情】收留忘記帶鑰匙的室友", "開門服務，全年無休。"],
@@ -238,11 +250,12 @@ const OFFICES = {
     caption: "露營、遛狗好去處，歡迎闔家光臨的北大公園！",
     branches: [`<button class="inline-link" data-go="newsdorm">是在哈樓</button>支局`, "圖書館支局", "學餐支局"],
     news: [
-      ["115/11/06", `蒙校友${CONFIG.recipient}特返本局賀其誕辰，蓬蓽生輝，不勝榮幸`],
+      // 4th field: "card" = only after 學生證補辦RPG, "!card" = only before it, "dorm" = only after the dorm is named
+      ["115/11/06", "【重要！！】近期查獲多起冒用本局學生身分之宵小，近期將嚴格控管學生證發放", "", "!card"],
+      ["115/11/06", `蒙校友${CONFIG.recipient}特返本局賀其誕辰，蓬蓽生輝，不勝榮幸`, "", "card"],
       ["109/01/16", "狂賀！本局新宿舍樓建成，並以___為宿舍名", "newsdorm"],
-      ["109/01/16", "恭喜 辰曦樓 以371票力壓715票的 是在哈樓成為本局二期宿舍名稱", "newsvote", true], // true: only after the blank is filled
+      ["109/01/16", "恭喜 辰曦樓 以371票力壓715票的 是在哈樓成為本局二期宿舍名稱", "newsvote", "dorm"],
     ],
-    praise: [["同窗來函", "【你想對她說的一句話】"]],
     services: [
       { icon: "✉", name: "郵件", options: [{ label: "成績單", text: "作為本校榮譽校友，當然是87分不能更高了。" }, { label: "校友通知", text: "您已畢業。真的。" }, { label: "中超沙其馬", icon: "chicken1" }] },
       { icon: "?", name: "失物招領", options: [{
@@ -310,12 +323,31 @@ const UK_EVIDENCE = {
   caption: "證物：外國月亮沒有比較圓，常懷臺灣初心不改，與之共勉。",
 };
 
+// eight 來eight 棒 card: 8 煎餃 gather around the 8 head. Positions are % of the picture.
+const GYOZA_CARD = {
+  ring: { x: 58.3, y: 46.2, r: 17 }, // r is % of the width
+};
+
+// 中超style 三牲 card: two lines appear on the 普渡 scene, then the six products pop in. [picture, left %, top %, width %]
+const SANSHENG_CARD = {
+  bg: "assets/sansheng-bg.jpg",
+  lines: ["人有洋節Helloween", "吾等普渡平安double win"],
+  items: [
+    ["assets/sansheng-sachima.jpg", 2.41, 51.54, 25.07],
+    ["assets/sansheng-fish.jpg", 30.16, 20.8, 15.01],
+    ["assets/sansheng-gluten.jpg", 34.85, 63.36, 11.93],
+    ["assets/sansheng-porkrind.jpg", 53.35, 42.08, 10.72],
+    ["assets/sansheng-floss.jpg", 69.97, 32.39, 14.08],
+    ["assets/sansheng-dace.jpg", 65.42, 78.01, 23.32],
+  ],
+};
+
 // Download page. Locked cards show a black silhouette: shadow is a transparent PNG, emoji is blacked out. Three cards come from the tasks; chat unlocks by asking the robot for a hint; meme unlocks by finishing 學生證補辦RPG.
 const CARDS = [
-  { key: "eat", emoji: "🥟", title: "煎餃認證卡", text: "【卡片文字】", img: "", unlock: "完成搶救煎餃任務" },
-  { key: "open", shadow: "assets/shadow-open.png", title: "壽桃塔卡", text: "【卡片文字】", img: "assets/peach-tower-real.jpg", unlock: "完成急件開箱任務" },
-  { key: "match", shadow: "assets/shadow-match.png", title: "前科紀錄卡", text: "【卡片文字】", img: UK_EVIDENCE.img, unlock: "完成三牲連連看" },
-  { key: "chat", emoji: "🤖", title: "線上客服卡", text: "【卡片文字】", img: "", unlock: "在行動郵局向廢話客服要一次提示" },
+  { key: "eat", emoji: "🥟", title: "eight 來eight 棒", text: "", img: "assets/gyoza-card.jpg", anim: "gyoza", unlock: "完成8包煎餃拼到底" },
+  { key: "open", shadow: "assets/shadow-open.png", title: "壽桃塔卡", text: "", img: "", anim: "peach", unlock: "完成急件開箱任務" },
+  { key: "match", shadow: "assets/shadow-match.png", title: "中超style 三牲", text: "", img: "assets/sansheng-card.jpg", anim: "sansheng", unlock: "完成三牲連連看" },
+  { key: "chat", emoji: "🤖", title: "線上客服卡", text: "", img: "", unlock: "在行動郵局向廢話客服要一次提示" },
   { key: "meme", shadow: "assets/shadow-meme.png", title: "炫炮學生證", text: "恭喜找到最酷炫的隱藏卡牌\n雖然完全刷不了，也不會被當成北大在學生\n但蚵仔煎洋芋片的貓咪很可愛❤️", unlock: "完成學生證補辦RPG" },
 ];
 
@@ -335,7 +367,7 @@ const CHAT = {
   },
   replies: [
     { words: ["寄了什麼", "內容物", "包裹"], text: "經查，內容物重量 0 公克，海關無法開箱。" },
-    { words: ["惡作劇", "壽桃", "三牲"], text: "經本客服同寄件人詢問後\n寄件人轉知：「下次高機率再犯」\n以上言論不代表本客服立場，自二位私下解決👍" },
+    { words: ["惡作劇", "壽桃", "三牲"], text: "經本客服同寄件人詢問後\n寄件人轉知：「下次高機率再犯」\n以上言論不代表本客服立場，請二位私下解決👍" },
     { words: ["謝謝", "感謝"], text: "ㄅ客氣！寄件人表示下次不一定有🤣" },
     { words: ["生日", "快樂"], text: "本機器人已代為祝您生日快樂。" },
   ],
@@ -352,13 +384,19 @@ const NOTICES = [
 ];
 
 // Shown when the correct tracking number is entered.
+// The 北大郵局 row has two versions: everything there done, or only items collected.
 const TRACKING = [
-  ["11/03", "高雄郵局", "收寄。寄件人備註：這次真的不是惡作劇（本局不予採信）"],
-  ["11/03", "新北三峽郵局", "途經收件人舊宿舍，查無此人，僅查獲當年的音量紀錄"],
-  ["11/04", "桃園機場海關", "暫扣：寄件人有前科（壽桃塔偽裝發票案）"],
-  ["11/04", "桃園機場海關", "暫扣：寄件人有前科（三牲寄英國案）"],
-  ["11/05", "日本税関", "放行。內容物重量 0 公克，無法開箱"],
-  ["11/06", `${CONFIG.city}`, "配達完了"],
+  ["11/03", "高雄郵局", "收寄。寄件人備註：此為特急件，務必於11/06前送抵，煩請各局密切留意"],
+  ["11/03", "北大郵局", {
+    all: `抵達三峽分檢中心。北大郵局備註：特此感謝校友${CONFIG.recipient}蒞臨本局，協助完善缺失紀錄。`,
+    some: `抵達三峽分檢中心。北大郵局備註：特邀校友${CONFIG.recipient}至本局，參與新宿舍落成典禮。`,
+  }],
+  ["11/04", "宿舍郵局", "由北大愛悅轉往會計事務所。宿舍郵局備註：經查無相關學籍紀錄，音量紀錄"],
+  ["11/04", "會計事務所", "由會計事務所送至桃園機場海關。會計事務所備註：經查無相關學籍紀錄，音量紀錄"],
+  ["11/05", "桃園機場海關", "暫扣。桃園機場海關備註：疑含禁運之肉類製品。"],
+  ["11/05", "桃園機場海關", "放行，包裹運送航班為 CI 1106。桃園機場海關備註：經核查為非生鮮與肉類組合之三牲，現已放行。"],
+  ["11/05", "日本税関", "放行。日本税関備註：重量未知，敬祝收件人生日快快樂。"],
+  ["11/06", `${CONFIG.city}`, "配達完了。"],
 ];
 
 const ENDING = {

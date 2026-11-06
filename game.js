@@ -38,7 +38,7 @@ function shell(section, title, body) {
       <p class="crumb"><a href="#">首頁</a> &gt; ${section} &gt; <em>${title}</em></p>
       ${body}
     </main>
-    <footer>本站為私人生日禮物，純屬惡搞，與中華郵政股份有限公司無關。
+    <footer>本站為私人生日禮物，純屬惡搞，與中華郵政股份有限公司無關。<span class="version">v${CONFIG.version}</span>
       ${location.search.includes("test") ? `<button class="reset" data-restart>測試用：清除紀錄，從頭開始</button>` : ""}</footer>`;
 }
 
@@ -121,9 +121,9 @@ function renderHome() {
   const slots = Object.entries(TASKS).map(([key, t]) => `<span class="slot">${S.parts[key] ? CONFIG.parts[t.n] : "－－－－"}</span>`).join("");
   const open = openTasks().length;
   shell("郵務業務", "國際郵件追蹤查詢", `
-    <p class="notice"><b>${CONFIG.recipient} 君：</b>您有一件來自高雄的國際包裹待領取。追蹤號碼已遺失，請走完郵路，集滿三段號碼後查詢。</p>
+    <p class="notice">${HOME.notice.replace(/^(.*?君：)/, "<b>$1</b>")}</p>
     <div class="tiles">
-      <a class="tile main ${open ? "" : "done"}" href="${S.current ? `#${S.current}` : "#ladder"}"><span><b>郵路爬梯抽籤</b><small>${S.current ? `進行中：${TASKS[S.current].title}` : open ? "選一條郵路，找回追蹤號碼" : "全部完成"}</small></span><i>→</i></a>
+      <a class="tile main ${open ? "" : "done"}" href="${S.current ? `#${S.current}` : "#ladder"}"><span><b>${HOME.ladder}</b><small>${S.current ? `進行中：${TASKS[S.current].title}` : open ? HOME.ladderStart : "全部完成"}</small></span><i>→</i></a>
     </div>
     ${fishBlank()}
     <form id="track" class="trackbox">
@@ -262,18 +262,7 @@ function fryStage(food, age) {
 }
 
 // Drawn after the sender's reference pictures. .crust is the browned part that appears once cooked.
-// The chef, after the sender's reference: bald round head, a hand on top, white double-breasted jacket.
-const FRY_CHEF = `<svg viewBox="0 0 60 86" aria-hidden="true">
-  <g stroke="#222" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round">
-    <path fill="#f3c6a0" d="M27 22 L25 7 Q25 4 27.5 4 Q30 4 30 7 L30 13 L31 3 Q31 0.5 33.5 0.5 Q36 0.5 35.5 3 L34.5 14 L37 6 Q38 3.5 40 4.5 Q42 5.5 41 8 L37.5 21 Z"/>
-    <circle fill="#f8d6b8" cx="30" cy="38" r="17"/>
-    <path fill="#fff" d="M17 56 Q30 52 43 56 L47 72 L42 73 L42 84 L18 84 L18 73 L13 72 Z"/>
-    <path fill="none" d="M30 56 L30 84 M18 73 L18 64 M42 73 L42 64"/>
-  </g>
-  <circle fill="#f4a3a8" cx="20" cy="43" r="3.4"/><circle fill="#f4a3a8" cx="40" cy="43" r="3.4"/>
-  <path fill="none" stroke="#222" stroke-width="1.5" stroke-linecap="round" d="M23 36 L23 38 M37 36 L37 38 M29 41 L27 44 L30 45"/>
-  <g fill="#222"><circle cx="25" cy="62" r="1.3"/><circle cx="35" cy="62" r="1.3"/><circle cx="25" cy="69" r="1.3"/><circle cx="35" cy="69" r="1.3"/><circle cx="25" cy="76" r="1.3"/><circle cx="35" cy="76" r="1.3"/></g>
-</svg>`;
+const FRY_CHEF = `<img src="assets/chef.png" alt="">`;
 
 const FRY_ART = {
   gyoza: `<path class="dough" d="M3 30 Q8 22 14 18 Q18 14 22 16 Q26 12 30 14 Q34 11 38 14 Q42 12 46 16 Q50 15 54 20 Q58 24 61 30 C57 37 46 41 32 41 C18 41 7 37 3 30 Z"/>
@@ -298,10 +287,30 @@ const FRY_ART = {
 function renderEat() {
   if (!taskGuard("eat")) return;
   const title = TASKS.eat.title;
+  const stages = Object.keys(FRY.states);
   shell("主線任務", title, `
     <p>${FRY.intro}</p>
+    <div class="fry-legend">
+      <b class="fry-state" id="frystate" role="status">${FRY.states.raw}</b>
+      <div class="fry-pan">
+        ${Object.keys(FRY.foods).map((t) => `<div class="fry-slot ${t} raw" data-legend><svg viewBox="0 0 64 46" aria-hidden="true">${FRY_ART[t]}</svg><small>${FRY.foods[t].name}</small></div>`).join("")}
+      </div>
+    </div>
     <button class="btn" id="frystart">${FRY.start}</button>`);
-  document.getElementById("frystart").onclick = playFry;
+  // Shows each food going raw, cooked, burnt, so she knows what to look for.
+  let n = 0;
+  legendTimer = setInterval(() => {
+    const stage = stages[++n % stages.length];
+    document.getElementById("frystate").textContent = FRY.states[stage];
+    app.querySelectorAll("[data-legend]").forEach((el) => {
+      el.classList.remove(...stages);
+      el.classList.add(stage);
+    });
+  }, 1400);
+  document.getElementById("frystart").onclick = () => {
+    clearInterval(legendTimer);
+    playFry();
+  };
 }
 
 function playFry() {
@@ -416,8 +425,7 @@ function renderOpen() {
       <div class="angles" id="angles" hidden>
         <button data-turn="-1">◀ 向左轉</button><button data-tilt>俯視／平視</button><button data-turn="1">向右轉 ▶</button>
       </div>`}
-    <button class="btn" id="claim" ${done ? "" : "hidden"}>收下壽桃，取得號碼</button>
-    <img class="tower-photo" id="towerphoto" src="${PEACH.img}" alt="${PEACH.alt}" ${done ? "" : "hidden"}>`);
+    <button class="btn" id="claim" ${done ? "" : "hidden"}>收下壽桃，取得號碼</button>`);
   document.getElementById("claim").onclick = () => finishTask("open");
   if (done && peach3dFailed) return;
   const say = (text) => (document.getElementById("peachmsg").textContent = text);
@@ -446,7 +454,6 @@ function renderOpen() {
         finish();
         say(PEACH.after);
         document.getElementById("claim").hidden = false;
-        document.getElementById("towerphoto").hidden = false;
         document.getElementById("angles").hidden = true;
       },
     });
@@ -680,13 +687,25 @@ async function downloadCard(card) {
   g.fillStyle = "#038c00";
   g.font = '900 44px "Noto Sans TC", sans-serif';
   g.fillText(card.title, 300, 100);
-  const src = card.img;
+  const src = card.anim === "peach" && cardPeach ? cardPeach.snapshot() : card.img;
   if (src) {
     const img = new Image();
     img.src = src;
     await img.decode();
     const h = Math.min(420, (500 * img.height) / img.width);
     g.drawImage(img, 300 - (h * img.width) / img.height / 2, 130, (h * img.width) / img.height, h);
+    if (card.anim === "peach") {
+      // The caption is drawn over the 3D view on the page, so add it to the picture too.
+      g.font = '900 36px "Noto Sans TC", sans-serif';
+      const capW = g.measureText(PEACH.caption).width + 24, capY = 130 + h * 0.45;
+      g.fillStyle = "#fff";
+      g.fillRect(300 - capW / 2, capY - 26, capW, 52);
+      g.fillStyle = "#111";
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      g.fillText(PEACH.caption, 300, capY + 2);
+      g.textBaseline = "alphabetic";
+    }
   }
   g.fillStyle = "#434343";
   g.font = '28px "Noto Sans TC", sans-serif';
@@ -725,6 +744,30 @@ function renderDownload() {
         <button class="btn alt" data-video="ending">${STUDENT_CARD.meme.videoEnding}</button>
         <p class="err" id="videomsg" role="status"></p></li>`;
     }
+    if (c.anim === "sansheng") {
+      const sc = SANSHENG_CARD;
+      return `<li class="pcard wide"><div class="ss-card">
+          <img src="${sc.bg}" alt="普渡供桌，擺滿零食和供品">
+          ${sc.lines.map((t, n) => `<b class="ss-line" style="top:${11 + n * 16}%;animation-delay:${0.4 + n * 1}s">${t}</b>`).join("")}
+          ${sc.items.map(([src, x, y, w], n) => `<img class="ss-item" src="${src}" alt="" style="left:${x}%;top:${y}%;width:${w}%;animation-delay:${3.2 + n * 0.25}s">`).join("")}
+        </div><b>${c.title}</b><small>${c.text}</small>
+        <button class="btn" data-i="${i}">下載卡片</button></li>`;
+    }
+    if (c.anim === "gyoza") {
+      const { ring } = GYOZA_CARD, tall = 1685 / 900;
+      return `<li class="pcard wide"><div class="meme-end-pic gz-card">
+          <img src="${c.img}" alt="8包煎餃拼到底看板與街頭拜票照，人臉都以手繪頭像遮住">
+          ${Array.from({ length: 8 }, (_, i) => {
+            const a = (i / 8) * Math.PI * 2 - Math.PI / 2;
+            return `<span class="fry-slot gyoza ready gz-dumpling" style="left:${ring.x + ring.r * Math.cos(a)}%;top:${ring.y + (ring.r * Math.sin(a)) / tall}%;animation-delay:${0.4 + i * 0.22}s"><svg viewBox="0 0 64 46" aria-hidden="true">${FRY_ART.gyoza}</svg></span>`;
+          }).join("")}
+        </div><b>${c.title}</b><small>${c.text}</small>
+        <button class="btn" data-i="${i}">下載卡片</button></li>`;
+    }
+    if (c.anim === "peach") {
+      return `<li class="pcard wide"><div class="stage3d card-stage" id="cardpeach"><span class="card-fallback">🍑</span></div><b>${c.title}</b><small>${c.text}</small>
+        <button class="btn" data-i="${i}">下載卡片</button></li>`;
+    }
     const pic = c.img ? `<img src="${c.img}" alt="">` : "";
     return `<li class="pcard"><div class="face">${pic || c.emoji || "✉"}</div><b>${c.title}</b><small>${c.text}</small>
       <button class="btn" data-i="${i}">下載卡片</button></li>`;
@@ -736,6 +779,21 @@ function renderDownload() {
     b.onclick = () => downloadCard(CARDS[+b.dataset.i]);
   });
   if (document.getElementById("dlfront")) paintCardFront(document.getElementById("dlfront"));
+  const peachEl = document.getElementById("cardpeach");
+  if (peachEl) {
+    loadThree().then(() => {
+      if (!peachEl.isConnected) return;
+      const view3d = startPeach3D(peachEl, {
+        stage: "done", snapshot: true, saved: {}, tool: () => null,
+        say() {}, pct() {}, saveCut() {}, onStage() {}, onOpened() {},
+      });
+      peachEl.querySelector(".card-fallback").remove();
+      cardPeach = view3d;
+      view3d.replay();
+      clearInterval(cardTimer);
+      cardTimer = setInterval(() => (peachEl.isConnected ? view3d.replay() : clearInterval(cardTimer)), 5000);
+    }).catch(() => {});
+  }
   const videoButtons = [...app.querySelectorAll("[data-video]")];
   videoButtons.forEach((b) => {
     b.onclick = async () => {
@@ -1439,10 +1497,17 @@ async function recordMeme(full, onProgress) {
   });
 }
 
+function newsShows(when) {
+  if (!when) return true;
+  const done = when.startsWith("!") ? !NEWS_DONE[when.slice(1)]() : NEWS_DONE[when]();
+  return done;
+}
+const NEWS_DONE = { card: () => !!S.card.won, dorm: () => !!S.dormNamed };
+
 function renderOffice(key) {
   const o = OFFICES[key];
   const fold = (e) => (e.cardQ ? cardQuestion(e.cardQ) : `<details><summary>${e[0]}</summary><p>${e[1]}</p></details>`);
-  const dated = ([d, t, id]) => `<li ${id ? `id="${id}"` : ""}><b>${t.replace("___", S.dormNamed ? `<u>${o.dormName}</u>` : "___")}</b><span>${d}</span></li>`;
+  const dated = ([d, t, id]) => `<li ${id ? `id="${id}"` : ""}><b>${t.replace("___", S.dormNamed ? `<u>${o.dormName}</u>` : "___").replace(/\n/g, "<br>")}</b><span>${d}</span></li>`;
   const taken = (opt) => (opt.tool && S.bag.includes(opt.tool)) || (opt.icon && S.icons.includes(opt.icon)) || (opt.card && S.card.won) || (opt.dorm && S.dormNamed);
   const optionText = (opt) => (taken(opt) ? `✓ ${opt.label}` : opt.label);
   const sections = [["news", "最新消息"], ["services", "常用線上服務"], ["faq", "常見問題"], ["charity", "近期活動"]];
@@ -1458,9 +1523,7 @@ function renderOffice(key) {
       <div class="office-main">
         <section id="news" class="office-sec">
           <h3>最新消息</h3>
-          <div class="office-tabs"><button data-tab="0" class="on">最新消息</button><button data-tab="1">顧客肯定與期許</button></div>
-          <ul class="office-news" data-pane="0">${o.news.filter((n) => !n[3] || S.dormNamed).map(dated).join("")}</ul>
-          <ul class="office-news" data-pane="1" hidden>${o.praise.map(dated).join("")}</ul>
+          <ul class="office-news" data-pane="0">${o.news.filter((n) => newsShows(n[3])).map(dated).join("")}</ul>
         </section>
         <section id="services" class="office-sec">
           <h3 class="plain">常用線上服務</h3>
@@ -1485,17 +1548,9 @@ function renderOffice(key) {
   app.querySelectorAll("[data-go]").forEach((b) => {
     b.onclick = () => {
       const target = document.getElementById(b.dataset.go);
-      const pane = target.closest("[data-pane]");
-      if (pane && pane.hidden) app.querySelector(`[data-tab="${pane.dataset.pane}"]`).click();
       target.scrollIntoView({ behavior: "smooth" });
       target.classList.add("flash");
       setTimeout(() => target.classList.remove("flash"), 1600);
-    };
-  });
-  app.querySelectorAll("[data-tab]").forEach((b) => {
-    b.onclick = () => {
-      app.querySelectorAll("[data-tab]").forEach((x) => x.classList.toggle("on", x === b));
-      app.querySelectorAll("[data-pane]").forEach((x) => (x.hidden = x.dataset.pane !== b.dataset.tab));
     };
   });
   const found = document.getElementById("found");
@@ -1576,7 +1631,8 @@ function renderOffice(key) {
   const askQuestion = (opt, pick) => {
     found.innerHTML = `
       <form id="askform"><div class="q-row"><label for="askans">${opt.ask.question}</label>${clueButton("askhint")}</div><input id="askans" autocomplete="off"><button>送出</button>${clueList("askhint", opt.ask.hints, 0)}</form>
-      <p class="err" id="askerr" role="alert"></p>`;
+      <p class="err" id="askerr" role="alert"></p>
+      ${opt.ask.img ? `<img class="ask-img" src="${opt.ask.img}" alt="${opt.ask.alt}">` : ""}`;
     mountClue("askhint", opt.ask.hints, 0);
     document.getElementById("askform").onsubmit = (e) => {
       e.preventDefault();
@@ -1649,7 +1705,7 @@ function renderTrack() {
       <li><a href="#download"><b>下載專區</b><span>已解鎖 ${cards} / ${CARDS.length} 張卡片</span></a></li>
     </ul>
     <h3 class="group">郵件處理紀錄</h3>
-    <ol class="timeline">${TRACKING.map(([date, office, status]) => `<li><span>${date}・${office}</span>${status}</li>`).join("")}</ol>
+    <ol class="timeline">${TRACKING.map(([date, office, status]) => `<li><span>${date}・${office}</span>${typeof status === "string" ? status : S.card.won && S.dormNamed ? status.all : status.some}</li>`).join("")}</ol>
     <a class="btn" href="#card">開啟包裹</a>`);
 }
 
@@ -1705,9 +1761,11 @@ const VIEWS = {
   dorm: () => renderOffice("dorm"), ntpu: () => renderOffice("ntpu"),
   track: renderTrack, card: renderCard,
 };
-let timer, scrollAfterRender = null;
+let timer, legendTimer, cardTimer, cardPeach = null, scrollAfterRender = null;
 function render() {
   clearInterval(timer);
+  clearInterval(legendTimer);
+  clearInterval(cardTimer);
   clearTimeout(memeTimer);
   const msLeft = new Date(CONFIG.unlockAt) - Date.now();
   const locked = msLeft > 0 && !location.search.includes("test");

@@ -15,7 +15,7 @@ function startPeach3D(el, hooks) {
   const T = window.THREE;
   const W = 2.4, H = 5.6, D = 2.4, CUT_REACH = 0.28, WRAP_REACH = 0.24, TAPE_GOAL = 0.9, PULL_PIXELS = 140;
   const width = el.clientWidth, height = Math.round(width * 1.1);
-  const renderer = new T.WebGLRenderer({ antialias: true });
+  const renderer = new T.WebGLRenderer({ antialias: true, preserveDrawingBuffer: !!hooks.snapshot }); // snapshot: the card can be saved as a picture
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.setSize(width, height);
   const canvas = renderer.domElement;
@@ -392,6 +392,7 @@ function startPeach3D(el, hooks) {
   }
 
   function showCaption() {
+    el.querySelectorAll(".peach-cap").forEach((c) => c.remove());
     el.insertAdjacentHTML("beforeend", `<b class="meme-text peach-cap">${PEACH.caption.replace("🍑", "<i>🍑</i>")}</b>`);
   }
 
@@ -566,6 +567,12 @@ function startPeach3D(el, hooks) {
   }
 
   return {
+    // The card replays the mountain popping up and the caption growing.
+    replay: () => {
+      mountain.scale.setScalar(0.01);
+      showMountain(false);
+    },
+    snapshot: () => canvas.toDataURL("image/png"),
     turn: (dir) => {
       goal.az += (dir * Math.PI) / 2;
       saveCut();
