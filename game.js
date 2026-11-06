@@ -1716,7 +1716,7 @@ function renderCard() {
     <section class="ending">
       <div class="stamp">配達完了</div>
       <h1>生日快樂</h1>
-      <div class="letter">${ENDING.letter.map((l) => `<p>${l}</p>`).join("")}</div>
+      <div class="letter">${ENDING.letter.map((l) => `<p>${l.replace(/\n/g, "<br>")}</p>`).join("")}</div>
       ${photos ? `<div class="photos">${photos}</div>` : ""}
     </section>`);
   for (let i = 0; i < 60; i++) {

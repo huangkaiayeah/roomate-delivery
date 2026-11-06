@@ -5,7 +5,7 @@ const CONFIG = {
   city: "日本橫濱",
   parts: ["0719", "2829", "1106"], // tracking number pieces, in the same order as TASKS
   unlockAt: "2026-11-06T00:00:00+09:00", // midnight Japan time
-  version: "1.5.1", // shown in the footer; raise it with each upload
+  version: "1.5.2", // shown in the footer; raise it with each upload
 };
 
 // Search page wording
@@ -202,7 +202,7 @@ const OFFICES = {
     caption: "噹~噹~噹~噹~~每天配著北大高中的鐘聲起床，又是美好的一天。",
     branches: ["北大愛悅支局", "客廳支局", "廚房支局"],
     news: [
-      ["115/11/06", "本局今日有壽星到局，請各支局提高音量"],
+      ["115/11/06", "本日有貴客蒞臨，請各部門密切注意生日應援の響應時間！"],
       ["108/12/28", `【${CONFIG.recipient}特別提醒】赴韓參加12/31 EXO演唱會之航班為凌晨5點，請${CONFIG.sender}出門前再次默念：手機錢包護照鑰匙！`],
     ],
     services: [
@@ -403,9 +403,7 @@ const ENDING = {
   // Replace with your own words. This is a draft of the gift itself.
   letter: [
     "阿如：",
-    "壽桃嚇過你，三牲也送過了，今年我想了很久，決定送你一個連海關都攔不下來的東西。",
-    "從三峽的宿舍到現在，你一路從台灣走到英國、再到日本，我的包裹也一路追著你跑。不管你下一站在哪裡，都還是會收到。",
-    "生日快樂。明年小心你的辦公桌。",
+    "可惡！！太高估自己\n還有動畫+結尾在產製中🫠\n請稍後 等我完善體驗\n趕在日本時間11/6結束前祝妳生日快樂啦啦啦啦❤️", // temporary, full letter coming
     "KU，高雄",
   ],
   photos: [], // e.g. ["assets/dorm.jpg", "assets/peach-tower.jpg"]
