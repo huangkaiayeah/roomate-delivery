@@ -5,7 +5,7 @@ const CONFIG = {
   city: "日本橫濱",
   parts: ["0719", "2829", "1106"], // tracking number pieces, in the same order as TASKS
   unlockAt: "2026-11-06T00:00:00+09:00", // midnight Japan time
-  version: "1.8.2", // shown in the footer; raise it with each upload
+  version: "1.10.0", // shown in the footer; raise it with each upload
 };
 
 // Search page wording
@@ -346,9 +346,9 @@ const SANSHENG_CARD = {
   smoke: [[91.5, 14, 32, 16], [81.2, 47, 45, 14]],
 };
 
-// Download buttons on animated cards. 影片 on 炫炮學生證 is the full animation; GIF and 回力鏢 use its ending.
+// Download buttons on animated cards. 影片 on 炫炮學生證 is the full animation; GIF and boomerang use its ending.
 const DOWNLOAD = {
-  kinds: { png: "卡片", gif: "GIF", boom: "回力鏢", video: "影片" },
+  kinds: { png: "卡片", gif: "GIF", boom: "boomerang", video: "影片" },
   busy: "製作中，請留在此頁",
   fail: "這台裝置無法製作這個檔案。",
 };
@@ -356,7 +356,7 @@ const DOWNLOAD = {
 // Download page. Locked cards show a black silhouette: shadow is a transparent PNG, emoji is blacked out. Three cards come from the tasks; chat unlocks by asking the robot for a hint; meme unlocks by finishing 學生證補辦RPG.
 const CARDS = [
   { key: "eat", emoji: "🥟", title: "eight 來eight 棒", text: "", img: "assets/gyoza-card.jpg", anim: "gyoza", unlock: "完成8包煎餃拼到底" },
-  { key: "open", shadow: "assets/shadow-open.png", title: "壽桃塔卡", text: "", img: "", anim: "peach", unlock: "完成急件開箱任務" },
+  { key: "open", shadow: "assets/shadow-open.png", title: "壽桃塔卡", text: "福氣大禮包", img: "", anim: "peach", unlock: "完成急件開箱任務" },
   { key: "match", shadow: "assets/shadow-match.png", title: "中超style 三牲", text: "", img: "assets/sansheng-card.jpg", anim: "sansheng", unlock: "完成三牲連連看" },
   { key: "chat", emoji: "🤖", title: "線上客服卡", text: "", img: "", unlock: "在行動郵局向廢話客服要一次提示" },
   { key: "meme", shadow: "assets/shadow-meme.png", title: "炫炮學生證", text: "恭喜找到最酷炫的隱藏卡牌\n雖然完全刷不了，也不會被當成北大在學生\n但蚵仔煎洋芋片的貓咪很可愛❤️", unlock: "完成學生證補辦RPG" },

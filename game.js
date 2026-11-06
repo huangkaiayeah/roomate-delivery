@@ -323,6 +323,7 @@ function playGyozaCard(card) {
       $("gzheld").innerHTML = foodSvg(next);
     }
     $("gz8").style.rotate = `${-6 * open}deg`;
+    $("gzstamp").hidden = t < THROW * COUNT + 250;            // the seal, once everything is eaten
     $("gztop").setAttribute("transform", `translate(0 ${-22 * open})`);
     $("gzbot").setAttribute("transform", `translate(0 ${22 * open})`);
     if (active && k >= 340 && thrown !== n) {
@@ -511,6 +512,12 @@ function renderOpen() {
       stage: S.peachStage,
       tool: () => S.held,
       saved: S.peachCut || {},
+      record: (event) => {
+        const now = performance.now(), log = (S.peachRec ||= []);
+        if (log.length >= 4000 || (event.k === "p" && now - peachRecAt < 40)) return;
+        log.push({ ...event, d: Math.round(Math.min(now - peachRecAt, 400)) });
+        peachRecAt = now;
+      },
       saveCut: (cut) => {
         S.peachCut = cut;
         save();
@@ -868,6 +875,7 @@ async function gyozaSource() {
       const sc = s < 0.9 ? 1 - s * 0.3 : 0.73 - ((s - 0.9) / 0.1) * 0.48;
       g.save(); g.translate(x, y); g.rotate((s * 200 * Math.PI) / 180); g.scale(sc, sc); g.drawImage(food[order[n]], -fw / 2, (-fw * 46) / 64 / 2, fw, (fw * 46) / 64); g.restore();
     }
+    drawPostStamp(g, 0, 0, W, H, (t - (THROW * COUNT + 250)) / 400);
     for (let j = 0; j < COUNT; j++) {                    // everything eaten so far, ringed around the head
       const p = (t - (j * THROW + 980)) / 500;
       if (p < 0) continue;
@@ -878,6 +886,29 @@ async function gyozaSource() {
     }
   };
   return { canvas, duration: D, segment: [0, THROW], render };
+}
+
+// The 室友郵政 seal that ends every card, as on the student card application: it slams down over 0.4 s
+// in the bottom right corner. stampHtml is the page version; drawPostStamp draws it into a recording.
+const stampHtml = (attrs = "") => `<i class="card-stamp" ${attrs}>${STUDENT_CARD.stamp.join("<br>")}</i>`;
+function drawPostStamp(g, x, y, w, h, p, alpha = 1) {
+  if (p <= 0) return;
+  const d = 0.17 * w, fs = 0.23 * d, k = p >= 1 ? 1 : 3 - 2 * p;
+  g.save();
+  g.globalAlpha = 0.85 * Math.min(p, 1) * alpha;
+  g.translate(x + w - 0.03 * w - d / 2, y + h - 0.03 * h - d / 2);
+  g.rotate((-10 * Math.PI) / 180);
+  g.scale(k, k);
+  g.strokeStyle = g.fillStyle = "#d0402b";
+  g.lineWidth = 0.05 * d;
+  g.beginPath();
+  g.arc(0, 0, d / 2 - g.lineWidth / 2, 0, Math.PI * 2);
+  g.stroke();
+  g.font = `900 ${fs}px "Noto Sans TC", sans-serif`;
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  STUDENT_CARD.stamp.forEach((line, n) => g.fillText(line, 0, (n - 0.5) * 1.15 * fs));
+  g.restore();
 }
 
 // Incense smoke over the 普渡 table: soft puffs rise from each stick and drift up-left, repeating every 4 s.
@@ -916,6 +947,7 @@ async function sanshengSource(width = 540) {
       g.save(); g.globalAlpha = Math.min(1, p / 0.32) * fade; g.translate((x / 100) * W + iw / 2, (y / 100) * H + ih / 2); g.scale(s, s);
       g.shadowColor = "rgba(0,0,0,.35)"; g.shadowBlur = 4; g.shadowOffsetY = 1; g.drawImage(items[n], -iw / 2, -ih / 2, iw, ih); g.restore();
     });
+    drawPostStamp(g, 0, 0, W, H, (t - (popAt + 5 * GAP + 900)) / 400, fade);
     const fs = 0.046 * W;
     g.font = `700 ${fs}px "Noto Sans TC", sans-serif`; g.textBaseline = "middle";
     chars.forEach((line, n) => {
@@ -945,32 +977,91 @@ async function playSansheng(holder) {
   requestAnimationFrame(frame);
 }
 
-// 壽桃塔卡: the 3D view is real-time, so its frames are captured as it plays, with the caption drawn on top.
+// 壽桃塔卡: a fresh 3D view that replays how she opened the box, from the first cut to the peach mountain.
+const PEACH_QUIET = { snapshot: true, saved: {}, tool: () => null, say() {}, pct() {}, saveCut() {}, onStage() {}, onOpened() {} };
+// The replay shows how far the opening is, like the task page does, and ends with the seal.
+function peachReplay(el, onReplayDone) {
+  el.insertAdjacentHTML("beforeend", `<b class="replay-pct"></b>`);
+  const pct = el.lastElementChild;
+  return startPeach3D(el, {
+    ...PEACH_QUIET, stage: "box", replay: S.peachRec || [], onReplayDone,
+    pct: (text) => (pct.textContent = text),
+    onEnding: () => el.insertAdjacentHTML("beforeend", stampHtml()),
+  });
+}
+
+// A 3D view drawn off screen, for pictures and recordings.
+function offscreenPeach(width) {
+  const holder = document.createElement("div");
+  holder.className = "stage3d";
+  holder.style.cssText = `position:fixed;left:-10000px;top:0;width:${width}px`;
+  document.body.append(holder);
+  return holder;
+}
+
+// The finished mountain with its caption box, for the 卡片 picture.
+async function peachStill() {
+  await loadThree();
+  const holder = offscreenPeach(600), view = startPeach3D(holder, { ...PEACH_QUIET, stage: "done" });
+  for (let i = 0; i < 3; i++) await new Promise((r) => requestAnimationFrame(r));
+  const url = view.snapshot();
+  holder.remove();
+  return url;
+}
+
+// The replay is real-time 3D, so its frames are captured as it plays, with the tool and caption drawn on top.
 async function peachSource() {
-  const gl = document.querySelector("#cardpeach canvas");
-  if (!gl || !cardPeach) throw new Error("3D view not ready");
-  clearInterval(cardTimer);
-  const W = 360, H = Math.round((W * gl.height) / gl.width), fps = 12, frames = [];
-  cardPeach.replay();
+  await loadThree();
+  const W = 360, holder = offscreenPeach(W);
+  let done = false;
+  const view = peachReplay(holder, () => (done = true));
+  const gl = holder.querySelector("canvas"), H = Math.round((W * gl.height) / gl.width), frames = [];
   const t0 = performance.now();
-  while (performance.now() - t0 < 3600) {
-    await new Promise((r) => requestAnimationFrame(r));
-    const t = performance.now() - t0, f = newCanvas(W, H), g = f.getContext("2d");
-    g.drawImage(gl, 0, 0, W, H);
-    if (t > 900) {
-      const s = 0.42 + 0.58 * backOut(Math.min(1, (t - 900) / 1000)), fs = 0.096 * W;
-      g.save(); g.translate(W / 2, H * 0.45); g.scale(s, s);
-      g.font = `900 ${fs}px "Noto Sans TC", sans-serif`; g.textAlign = "center"; g.textBaseline = "middle";
-      const tw = g.measureText(PEACH.caption).width;
-      g.fillStyle = "#fff"; g.fillRect(-tw / 2 - 0.02 * W, -fs * 0.6 - 0.004 * W, tw + 0.04 * W, fs * 1.2 + 0.008 * W);
-      g.fillStyle = "#111"; g.fillText(PEACH.caption, 0, 0); g.restore();
+  let capAt = null, popAt = null, stampAt = null;
+  try {
+    while (!done && performance.now() - t0 < 60000) {
+      await new Promise((r) => requestAnimationFrame(r));
+      const t = performance.now() - t0, f = newCanvas(W, H), g = f.getContext("2d");
+      g.drawImage(gl, 0, 0, W, H);
+      const mark = view.mark();
+      if (mark) {
+        g.font = "26px sans-serif"; g.textBaseline = "top";
+        g.fillText(mark[2], mark[0] * W - 6, mark[1] * H - 34);
+      }
+      if (popAt === null && view.stage() === "mountain") popAt = t;
+      const pct = holder.querySelector(".replay-pct").textContent;
+      if (pct) {
+        const fs = 0.042 * W, pw = (g.font = `700 ${fs}px "Noto Sans TC", sans-serif`, g.measureText(pct).width + 0.048 * W), ph = fs * 1.5;
+        g.fillStyle = "rgba(0,0,0,.55)";
+        g.beginPath(); g.roundRect(0.03 * W, 0.03 * W, pw, ph, ph / 2); g.fill();
+        g.fillStyle = "#fff"; g.textBaseline = "middle"; g.textAlign = "left"; g.fillText(pct, 0.03 * W + 0.024 * W, 0.03 * W + ph / 2);
+      }
+      if (holder.querySelector(".peach-cap")) {
+        capAt ??= t;
+        const s = 0.42 + 0.58 * backOut(Math.min(1, (t - capAt) / 1000)), fs = 0.096 * W;
+        g.save(); g.translate(W / 2, H * 0.45); g.scale(s, s);
+        g.font = `900 ${fs}px "Noto Sans TC", sans-serif`; g.textAlign = "center"; g.textBaseline = "middle";
+        const tw = g.measureText(PEACH.caption).width;
+        g.fillStyle = "#fff"; g.fillRect(-tw / 2 - 0.02 * W, -fs * 0.6 - 0.004 * W, tw + 0.04 * W, fs * 1.2 + 0.008 * W);
+        g.fillStyle = "#111"; g.fillText(PEACH.caption, 0, 0); g.restore();
+      }
+      if (holder.querySelector(".card-stamp")) {
+        stampAt ??= t;
+        drawPostStamp(g, 0, 0, W, H, (t - stampAt) / 400);
+      }
+      frames.push([t, new Promise((r) => f.toBlob(r, "image/jpeg", 0.85))]);
     }
-    frames.push([t, f]);
+  } finally {
+    holder.remove();
   }
-  cardTimer = setInterval(() => (gl.isConnected ? cardPeach.replay() : clearInterval(cardTimer)), 5000);
   const canvas = newCanvas(W, H), g = canvas.getContext("2d");
-  const render = (time) => g.drawImage((frames.find(([t]) => t >= time) || frames[frames.length - 1])[1], 0, 0);
-  return { canvas, duration: 3600, segment: [0, 2400], render };
+  const render = async (time) => {
+    const k = frames.findIndex(([t]) => t >= time), bmp = await createImageBitmap(await frames[k < 0 ? frames.length - 1 : k][1]);
+    g.drawImage(bmp, 0, 0);
+    bmp.close();
+  };
+  const end = frames[frames.length - 1][0], pop = popAt ?? end - 3500;
+  return { canvas, duration: end, segment: [pop, pop + 2000], render }; // boomerang: the mountain popping up and the caption growing
 }
 
 async function cardSource(card) {
@@ -1040,6 +1131,7 @@ async function runDownload(btn) {
     if (kind === "png") {
       let still = null;
       if (card.key === "meme") { const src = await cardSource(card); await src.render(2500); still = src.canvas.toDataURL("image/png"); }
+      if (card.anim === "peach") still = await peachStill();
       await downloadCard(card, still);
     } else if (kind === "video" && card.key === "meme") {
       const { blob, ext } = await recordMeme(true, say);
@@ -1070,7 +1162,7 @@ async function downloadCard(card, still = null) {
   g.fillStyle = "#038c00";
   g.font = '900 44px "Noto Sans TC", sans-serif';
   g.fillText(card.title, 300, 100);
-  const src = still || (card.anim === "peach" && cardPeach ? cardPeach.snapshot() : card.img);
+  const src = still || card.img;
   if (src) {
     const img = new Image();
     img.src = src;
@@ -1150,6 +1242,7 @@ function renderDownload() {
               ${["top", "bot"].map((h) => `<g id="gz${h}"><text clip-path="url(#gz${h})" x="100" y="104" text-anchor="middle" dominant-baseline="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="118" fill="#d33a3a">8</text></g>`).join("")}
               <circle id="gzmouth" cx="100" cy="101" r=".1" fill="none"/>
             </svg></div>
+          ${stampHtml('id="gzstamp" hidden')}
         </div><b>${c.title}</b><small>${c.text}</small>
         ${dlButtons(i)}</li>`;
     }
@@ -1174,15 +1267,13 @@ function renderDownload() {
   if (peachEl) {
     loadThree().then(() => {
       if (!peachEl.isConnected) return;
-      const view3d = startPeach3D(peachEl, {
-        stage: "done", snapshot: true, saved: {}, tool: () => null,
-        say() {}, pct() {}, saveCut() {}, onStage() {}, onOpened() {},
-      });
-      peachEl.querySelector(".card-fallback").remove();
-      cardPeach = view3d;
-      view3d.replay();
-      clearInterval(cardTimer);
-      cardTimer = setInterval(() => (peachEl.isConnected ? view3d.replay() : clearInterval(cardTimer)), 5000);
+      // Plays her opening from the start, then again on a fresh view.
+      const loop = () => {
+        if (!peachEl.isConnected) return;
+        peachEl.replaceChildren();
+        peachReplay(peachEl, () => setTimeout(loop));
+      };
+      loop();
     }).catch(() => {});
   }
   app.querySelectorAll("[data-dl]").forEach((b) => {
@@ -1441,6 +1532,7 @@ function memeEnding(frontId) {
     <div class="meme-end-pic">
       <img src="${sc.meme.ending}" alt="一隻貓舉著學生證衝向你，背景是漫畫集中線">
       <b class="meme-text">${sc.meme.endText}</b>
+      ${stampHtml('style="animation-delay:1.2s"')}
       <div class="card3d-wrap"><div class="card3d">
         ${[-1.5, -0.75, 0, 0.75, 1.5].map((z) => `<i style="transform:translateZ(${z}px)"></i>`).join("")}
         <canvas class="c3-face" id="${frontId}"></canvas>
@@ -1813,6 +1905,7 @@ async function recordMeme(full, onProgress, asSource = false) {
     g.fillStyle = "#111";
     g.strokeText(m.endText, 0, -h / 2 + h * 0.015);
     g.fillText(m.endText, 0, -h / 2 + h * 0.015);
+    drawPostStamp(g, -w / 2, -h / 2, w, h, (ms - 1200) / 400);
     g.translate(w * -0.01, h * 0.06);
     g.rotate((-14 * Math.PI) / 180);
     const cw = w * 0.56, ch = (cw * 409) / 657, turn = Math.cos((ms / MEME_END_MS) * Math.PI * 2), wide = (cw * Math.abs(turn)) / 2;
@@ -2137,11 +2230,10 @@ const VIEWS = {
   dorm: () => renderOffice("dorm"), ntpu: () => renderOffice("ntpu"),
   track: renderTrack, card: renderCard,
 };
-let timer, legendTimer, cardTimer, cardPeach = null, scrollAfterRender = null;
+let timer, legendTimer, peachRecAt = -1e9, scrollAfterRender = null;
 function render() {
   clearInterval(timer);
   clearInterval(legendTimer);
-  clearInterval(cardTimer);
   clearTimeout(memeTimer);
   const msLeft = new Date(CONFIG.unlockAt) - Date.now();
   const locked = msLeft > 0 && !location.search.includes("test");

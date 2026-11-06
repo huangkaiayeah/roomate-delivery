@@ -11,6 +11,7 @@ function loadThree() {
 }
 
 // hooks: stage ("box" or "tower"), tool() = held tool or null, say(text), pct(text), onStage(stage), onOpened()
+// record(event): what she does while opening it. replay: those events, played back instead of a finger; onEnding(), onReplayDone()
 function startPeach3D(el, hooks) {
   const T = window.THREE;
   const W = 2.4, H = 5.6, D = 2.4, CUT_REACH = 0.28, WRAP_REACH = 0.24, TAPE_GOAL = 0.9, PULL_PIXELS = 140;
@@ -80,9 +81,43 @@ function startPeach3D(el, hooks) {
 
   // The tape runs down the left side, over the top along the seam, and down the right side, so she has to turn the box.
   const tape = [];
-  const tapeMat = std("#e8d9a8", { roughness: 0.25 });
-  function tapePiece(x, y, sx, sy) {
-    const m = new T.Mesh(new T.BoxGeometry(sx, sy, 0.34), tapeMat);
+  // Roommate Post packing tape: the 室 monogram printed along it. Each small piece shows its own slice of the strip.
+  const strip = (g, w, h, logos) => {
+    g.fillStyle = "#e8d9a8";
+    g.fillRect(0, 0, w, h);
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    for (let i = 0; i < logos; i++) {
+      const cell = w / logos, x = i * cell + cell * 0.22, r = h * 0.32;
+      g.fillStyle = "#fff";
+      g.strokeStyle = "#1d4f9c";
+      g.lineWidth = h * 0.07;
+      g.beginPath();
+      g.arc(x, h / 2, r, 0, Math.PI * 2);
+      g.fill();
+      g.stroke();
+      g.fillStyle = "#d0402b";
+      g.font = `900 ${h * 0.4}px "Noto Sans TC", sans-serif`;
+      g.fillText("室", x, h / 2 + h * 0.02);
+      g.fillStyle = "#8a5a2a";
+      g.font = `700 ${h * 0.22}px "Noto Sans TC", sans-serif`;
+      g.fillText("室友郵政", i * cell + cell * 0.66, h / 2);
+    }
+  };
+  const topTape = textTexture(1792, (g, w, h) => strip(g, w, h, 4), 256); // the top tape is 7 times as long as it is wide
+  const sideTape = textTexture(256, (g, w, h) => {                       // the sides: 2.6 times, printed downward
+    g.translate(w, 0);
+    g.rotate(Math.PI / 2);
+    strip(g, h, w, 1);
+  }, 672);
+  function tapeMat(tex, u, v, su, sv) {
+    const t = tex.clone();
+    t.repeat.set(su, sv);
+    t.offset.set(u, v);
+    return std("#ffffff", { map: t, roughness: 0.25 });
+  }
+  function tapePiece(x, y, sx, sy, mat) {
+    const m = new T.Mesh(new T.BoxGeometry(sx, sy, 0.34), mat);
     m.position.set(x, y, 0);
     boxG.add(m);
     tape.push(m);
@@ -90,10 +125,10 @@ function startPeach3D(el, hooks) {
   const SIDE = 8, TOP = 22, drop = 0.9;
   for (let i = 0; i < SIDE; i++) {
     const y = H - drop + ((i + 0.5) * drop) / SIDE;
-    tapePiece(-W / 2 - 0.012, y, 0.024, drop / SIDE);
-    tapePiece(W / 2 + 0.012, y, 0.024, drop / SIDE);
+    tapePiece(-W / 2 - 0.012, y, 0.024, drop / SIDE, tapeMat(sideTape, 1, i / SIDE, -1, 1 / SIDE));
+    tapePiece(W / 2 + 0.012, y, 0.024, drop / SIDE, tapeMat(sideTape, 0, i / SIDE, 1, 1 / SIDE));
   }
-  for (let i = 0; i < TOP; i++) tapePiece(-W / 2 + ((i + 0.5) * W) / TOP, H + 0.042, W / TOP, 0.024);
+  for (let i = 0; i < TOP; i++) tapePiece(-W / 2 + ((i + 0.5) * W) / TOP, H + 0.042, W / TOP, 0.024, tapeMat(topTape, i / TOP, 0, 1 / TOP, 1));
   const seam = new T.Mesh(new T.BoxGeometry(W, 0.012, 0.03), std("#2a1c0c"));
   seam.position.y = H + 0.036;
   boxG.add(seam);
@@ -240,6 +275,8 @@ function startPeach3D(el, hooks) {
     bow.add(m);
     return m;
   });
+  const peakBow = bow.clone(); // the same bow and 壽 crown the peach mountain at the end
+  const peakEmblem = emblem.clone();
   // The long ribbons from the bow down each side to the bucket.
   const sideRibbons = [-1, 1].map((s) => {
     const dx = s * (0.14 - 1.04), dy = 4.5 - 0.3, len = Math.hypot(dx, dy);
@@ -298,6 +335,10 @@ function startPeach3D(el, hooks) {
     heapLeaves.setMatrixAt(i, place.matrix);
   });
   mountain.add(heapPeaches, heapLeaves);
+  peakBow.position.set(0, 3.42, 0);
+  peakEmblem.position.set(Math.sin(0.25) * 2.7, 1.05, Math.cos(0.25) * 2.7); // on the front, facing the camera
+  peakEmblem.rotation.set(-0.5, 0.25, 0, "YXZ");
+  mountain.add(peakBow, peakEmblem);
 
   // ---------- Motion ----------
   const tweens = [];
@@ -379,6 +420,7 @@ function startPeach3D(el, hooks) {
   function dropPeaches() {
     stage = "dropping";
     falling = true;
+    toolMark.hidden = true;
     hooks.pct("開封完成");
     hooks.say(PEACH.dropping);
     dashes.forEach((m) => (m.visible = false));
@@ -440,6 +482,19 @@ function startPeach3D(el, hooks) {
     return hit ? hit.point.clone() : null;
   }
 
+  // The held tool follows the finger. Returns where, as a share of the view.
+  function moveMark(x, y, tool) {
+    toolMark.hidden = false;
+    toolMark.textContent = TOOLS[tool].icon;
+    toolMark.style.left = `${x * canvas.clientWidth}px`;
+    toolMark.style.top = `${y * canvas.clientHeight}px`;
+  }
+  const rec = (event) => hooks.record && hooks.record(event);
+  const share = (e) => {
+    const box = canvas.getBoundingClientRect();
+    return [(e.clientX - box.left) / box.width, (e.clientY - box.top) / box.height];
+  };
+
   // Marks every item the finger's path touched, so a fast swipe still counts.
   function cutAlong(e, items, targets, onCut, reach = CUT_REACH) {
     const p = pick(e, targets);
@@ -458,8 +513,9 @@ function startPeach3D(el, hooks) {
   }
 
   let last = null, down = false, grabBow = false, lastX = 0, lastY = 0;
-  canvas.style.touchAction = "none";
+  if (!hooks.replay) canvas.style.touchAction = "none";
   canvas.onpointerdown = (e) => {
+    if (hooks.replay) return;
     canvas.setPointerCapture(e.pointerId);
     down = true;
     last = null;
@@ -470,36 +526,125 @@ function startPeach3D(el, hooks) {
     else if ((stage === "box" || stage === "tower") && !hooks.tool()) hooks.say(PEACH.needTool);
   };
   canvas.onpointerup = canvas.onpointercancel = () => {
-    if (down && (stage === "box" || stage === "tower")) saveCut();
+    if (hooks.replay) return;
+    if (down && (stage === "box" || stage === "tower")) {
+      rec({ k: "u" });
+      saveCut();
+    }
     down = false;
     toolMark.hidden = true;
   };
+  canvas.onpointerleave = () => {
+    if (!down) toolMark.hidden = true;
+  };
   canvas.onpointermove = (e) => {
-    if (!down) return;
+    if (hooks.replay) return;
+    const tool = hooks.tool(), [x, y] = share(e);
+    if (!down) {
+      // Hovering with a tool: it follows the pointer, ready to cut.
+      const ready = !!tool && (stage === "box" || stage === "tower");
+      canvas.style.cursor = ready ? "none" : "";
+      if (ready) moveMark(x, y, tool);
+      else toolMark.hidden = true;
+      return;
+    }
     if (grabBow && stage === "tower") {
       bowPixels += Math.hypot(e.clientX - lastX, e.clientY - lastY);
       lastX = e.clientX;
       lastY = e.clientY;
+      rec({ k: "b", v: Math.round(bowPixels) });
       showBow();
       checkTowerOpen();
       return;
     }
-    const tool = hooks.tool();
     if (!tool) return;
-    const box = canvas.getBoundingClientRect();
-    toolMark.hidden = false;
-    toolMark.textContent = TOOLS[tool].icon;
-    toolMark.style.left = `${e.clientX - box.left}px`;
-    toolMark.style.top = `${e.clientY - box.top}px`;
+    moveMark(x, y, tool);
+    rec({ k: "p", x: +x.toFixed(3), y: +y.toFixed(3), tool });
     if (stage === "box") {
-      cutAlong(e, tape, [body, flapFront.mesh, flapBack.mesh], cutTape);
+      cutAlong(e, tape, [body, flapFront.mesh, flapBack.mesh], (m) => {
+        cutTape(m);
+        rec({ k: "t", i: tape.indexOf(m) });
+      });
       if (showTape() >= TAPE_GOAL) openBox();
     } else if (stage === "tower") {
-      cutAlong(e, dashes, [wrap], cutDash, WRAP_REACH);
-      cutShare = Math.min(1, dashes.filter((m) => m.userData.cut).length / (DASH_COUNT - DASH_SPARE));
-      checkTowerOpen();
+      cutAlong(e, dashes, [wrap], (m) => {
+        cutDash(m);
+        rec({ k: "d", i: dashes.indexOf(m) });
+      }, WRAP_REACH);
+      towerCut();
     }
   };
+  function towerCut() {
+    cutShare = Math.min(1, dashes.filter((m) => m.userData.cut).length / (DASH_COUNT - DASH_SPARE));
+    checkTowerOpen();
+  }
+
+  // ---------- Replay ----------
+  // The card plays back how she opened it. Each event has d = ms since the one before; long ones are sped up
+  // to about 12 s of cutting. Anything not in the recording (e.g. from before it existed) is cut automatically,
+  // so the replay always reaches the peach mountain.
+  const play = hooks.replay && {
+    list: hooks.replay, at: 0, clock: 0, hold: 0, done: false,
+    speed: Math.max(1, hooks.replay.reduce((sum, ev) => sum + ev.d, 0) / 12000),
+  };
+  function applyEvent(ev) {
+    if (ev.k === "p" && TOOLS[ev.tool]) moveMark(ev.x, ev.y, ev.tool);
+    else if (ev.k === "u") toolMark.hidden = true;
+    else if (ev.k === "v") Object.assign(goal, { az: ev.az, el: ev.el });
+    else if (ev.k === "t" && stage === "box" && tape[ev.i]) {
+      if (!tape[ev.i].userData.cut) cutTape(tape[ev.i]);
+      if (showTape() >= TAPE_GOAL) openBox();
+    } else if (ev.k === "d" && stage === "tower" && dashes[ev.i]) {
+      if (!dashes[ev.i].userData.cut) cutDash(dashes[ev.i]);
+      towerCut();
+    } else if (ev.k === "b" && stage === "tower") {
+      bowPixels = ev.v;
+      showBow();
+      checkTowerOpen();
+    }
+  }
+  function autoCut() {
+    toolMark.hidden = true;
+    if (stage === "box") {
+      const m = tape.find((t) => !t.userData.cut);
+      if (m) cutTape(m);
+      if (showTape() >= TAPE_GOAL) openBox();
+    } else {
+      const m = dashes.find((t) => !t.userData.cut);
+      if (m) cutDash(m);
+      towerCut();
+    }
+  }
+  function replayStep(ms) {
+    if (stage === "mountain") {
+      play.hold += ms;
+      if (play.hold > 1400 && !play.stamped) {
+        play.stamped = true;
+        hooks.onEnding();
+      }
+      if (play.hold > 4200 && !play.done) {
+        play.done = true;
+        hooks.onReplayDone();
+      }
+      return;
+    }
+    if (stage !== "box" && stage !== "tower") return; // the box opening or the peaches falling
+    play.clock += ms * play.speed;
+    while (stage === "box" || stage === "tower") {
+      const ev = play.list[play.at];
+      if (!ev || (stage === "box" && (ev.k === "d" || ev.k === "b"))) {
+        if (play.clock < 60) return;
+        play.clock -= 60;
+        autoCut();
+        continue;
+      }
+      if (play.clock < ev.d) return;
+      play.clock -= ev.d;
+      play.at++;
+      applyEvent(ev);
+    }
+    play.clock = 0;
+  }
 
   // ---------- Loop ----------
   const gravity = 7;
@@ -512,6 +657,7 @@ function startPeach3D(el, hooks) {
     }
     const dt = Math.min((now - before) / 1000, 0.05);
     before = now;
+    if (play) replayStep(dt * 1000);
     for (const key of ["az", "el", "dist", "y"]) view[key] += (goal[key] - view[key]) * Math.min(1, dt * 5);
     camera.position.set(
       Math.sin(view.az) * Math.cos(view.el) * view.dist,
@@ -566,20 +712,22 @@ function startPeach3D(el, hooks) {
     checkTowerOpen();
   }
 
+  const turned = () => {
+    rec({ k: "v", az: +goal.az.toFixed(3), el: goal.el });
+    saveCut();
+  };
   return {
-    // The card replays the mountain popping up and the caption growing.
-    replay: () => {
-      mountain.scale.setScalar(0.01);
-      showMountain(false);
-    },
     snapshot: () => canvas.toDataURL("image/png"),
+    stage: () => stage,
+    // Where the tool is drawn, as a share of the view, for recording the card.
+    mark: () => (toolMark.hidden ? null : [parseFloat(toolMark.style.left) / canvas.clientWidth, parseFloat(toolMark.style.top) / canvas.clientHeight, toolMark.textContent]),
     turn: (dir) => {
       goal.az += (dir * Math.PI) / 2;
-      saveCut();
+      turned();
     },
     tilt: () => {
       goal.el = goal.el > 0.9 ? 0.28 : 1.15;
-      saveCut();
+      turned();
     },
   };
 }

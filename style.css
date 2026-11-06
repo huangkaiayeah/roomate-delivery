@@ -79,7 +79,13 @@ form button, .btn { display: block; width: 100%; margin-top: 10px; padding: 10px
 .peach-cap i { font-style: normal; }
 @keyframes cap-grow { from { transform: translateY(-50%) scale(.42); } }
 .card-stage { margin: 0 0 8px; }
-.gz-card { position: relative; overflow: hidden; margin: 0 0 8px; }
+.gz-card { position: relative; overflow: hidden; margin: 0 0 8px; container-type: inline-size; }
+/* The 室友郵政 seal at the end of every card animation, as on the student card application */
+.card-stamp { position: absolute; right: 3%; bottom: 3%; z-index: 2; width: 17cqw; aspect-ratio: 1; box-sizing: border-box; display: grid; place-content: center; font-size: 3.9cqw; font-style: normal; font-weight: 900; line-height: 1.15; text-align: center; color: #d0402b; border: .85cqw solid #d0402b; border-radius: 50%; opacity: .85; rotate: -10deg; pointer-events: none; animation: card-stamp .4s ease-out backwards; }
+.card-stamp[hidden] { display: none; }
+@keyframes card-stamp { from { scale: 3; opacity: 0; } }
+.replay-pct { position: absolute; left: 3cqw; top: 3cqw; z-index: 1; padding: 0 2.4cqw; font-size: 4.2cqw; line-height: 1.5; color: #fff; background: rgba(0, 0, 0, .55); border-radius: 99px; pointer-events: none; }
+.replay-pct:empty { display: none; }
 .gz-card > img { display: block; width: 100%; }
 .gz-fig { position: absolute; transform-origin: 50% 100%; }
 .gz-fig > img { display: block; width: 100%; }
@@ -436,9 +442,10 @@ h1 { font-size: 34px; margin: 8px 0 16px; }
 footer { padding: 12px 84px 12px 16px; text-align: center; font-size: 12px; color: var(--muted); background: var(--panel); }
 .confetti { position: fixed; top: -12px; width: 9px; height: 14px; animation: fall 3.5s linear forwards; pointer-events: none; }
 @keyframes fall { to { transform: translateY(105vh) rotate(540deg); opacity: .6; } }
-@media (prefers-reduced-motion: reduce) { .confetti { display: none; } .stamp { animation: none; } .ladder polyline.run { animation-duration: .01s; } .fry-chef.cook, .gz-ring, .push, .push.leaving, .q-bar, .app-stamp, .office-news li.flash, .meme-bubble, .meme-end-pic, .card3d, .stage3d .peach-cap { animation: none; } .push.leaving { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .confetti { display: none; } .stamp { animation: none; } .ladder polyline.run { animation-duration: .01s; } .fry-chef.cook, .gz-ring, .push, .push.leaving, .q-bar, .app-stamp, .card-stamp, .office-news li.flash, .meme-bubble, .meme-end-pic, .card3d, .stage3d .peach-cap { animation: none; } .push.leaving { opacity: 0; } }
 .pcard small:empty { display: none; }
-.dl-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
-.dl-row button { padding: 7px 2px; font: inherit; font-size: 14px; font-weight: 700; color: #fff; background: linear-gradient(var(--green), var(--green-dark)); border: 0; cursor: pointer; }
+.dl-row { display: flex; gap: 6px; margin-top: 8px; }
+.dl-row button { flex: 1 1 auto; }
+.dl-row button { padding: 7px 4px; font: inherit; font-size: 14px; font-weight: 700; color: #fff; background: linear-gradient(var(--green), var(--green-dark)); border: 0; cursor: pointer; }
 .dl-row button:disabled { background: #bbb; cursor: default; }
 .dlmsg { min-height: 1.4em; }
