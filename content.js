@@ -5,7 +5,7 @@ const CONFIG = {
   city: "日本橫濱",
   parts: ["0719", "2829", "1106"], // tracking number pieces, in the same order as TASKS
   unlockAt: "2026-11-06T00:00:00+09:00", // midnight Japan time
-  version: "1.7.4", // shown in the footer; raise it with each upload
+  version: "1.8.2", // shown in the footer; raise it with each upload
 };
 
 // Search page wording
@@ -151,10 +151,6 @@ const STUDENT_CARD = {
     skip: "略過",
     endText: "人類拿去玩",
     replay: "再看一次動畫",
-    videoFull: "下載完整動畫",
-    videoEnding: "下載結尾動畫",
-    videoBusy: "製作中，請留在此頁",
-    videoFail: "這台裝置無法製作動畫檔。",
   },
 };
 
@@ -336,15 +332,25 @@ const GYOZA_CARD = {
 // 中超style 三牲 card: two lines appear on the 普渡 scene, then the six products pop in. [picture, left %, top %, width %]
 const SANSHENG_CARD = {
   bg: "assets/sansheng-bg.jpg",
-  lines: ["人有洋節Helloween", "吾等普渡平安double win"],
+  lines: ["人有洋節helloween", "吾等普渡平安double win"], // typed out one character at a time
+  // [picture, x %, y %, width %, which MATCH.slots it is]. They pop in in the order she placed them in 三牲連連看.
   items: [
-    ["assets/sansheng-sachima.jpg", 2.41, 51.54, 25.07],
-    ["assets/sansheng-fish.jpg", 30.16, 20.8, 15.01],
-    ["assets/sansheng-gluten.jpg", 34.85, 63.36, 11.93],
-    ["assets/sansheng-porkrind.jpg", 53.35, 42.08, 10.72],
-    ["assets/sansheng-floss.jpg", 69.97, 32.39, 14.08],
-    ["assets/sansheng-dace.jpg", 65.42, 78.01, 23.32],
+    ["assets/sansheng-sachima.jpg", 2.41, 51.54, 25.07, 0],
+    ["assets/sansheng-fish.jpg", 30.16, 20.8, 15.01, 2],
+    ["assets/sansheng-gluten.jpg", 34.85, 63.36, 11.93, 3],
+    ["assets/sansheng-porkrind.jpg", 53.35, 42.08, 10.72, 4],
+    ["assets/sansheng-floss.jpg", 69.97, 32.39, 14.08, 1],
+    ["assets/sansheng-dace.jpg", 65.42, 78.01, 23.32, 5],
   ],
+  // incense sticks the smoke rises from: [x %, y % of the picture, how high it rises in % of the height, puffs]
+  smoke: [[91.5, 14, 32, 16], [81.2, 47, 45, 14]],
+};
+
+// Download buttons on animated cards. 影片 on 炫炮學生證 is the full animation; GIF and 回力鏢 use its ending.
+const DOWNLOAD = {
+  kinds: { png: "卡片", gif: "GIF", boom: "回力鏢", video: "影片" },
+  busy: "製作中，請留在此頁",
+  fail: "這台裝置無法製作這個檔案。",
 };
 
 // Download page. Locked cards show a black silhouette: shadow is a transparent PNG, emoji is blacked out. Three cards come from the tasks; chat unlocks by asking the robot for a hint; meme unlocks by finishing 學生證補辦RPG.

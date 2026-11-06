@@ -92,11 +92,7 @@ form button, .btn { display: block; width: 100%; margin-top: 10px; padding: 10px
 .gz-card .gz-ring { width: 14%; animation: gz-ring-in .5s ease-out both; }
 @keyframes gz-ring-in { 0% { opacity: 0; scale: .2; } 60% { opacity: 1; scale: 1.25; } 100% { opacity: 1; scale: 1; } }
 .ss-card { position: relative; overflow: hidden; margin: 0 0 8px; container-type: inline-size; }
-.ss-card > img:first-child { display: block; width: 100%; }
-.ss-line { position: absolute; left: 3%; padding: .4cqw 1.6cqw; font-size: 4.6cqw; line-height: 1.35; white-space: nowrap; color: #fff; background: #111; animation: ss-line 8s infinite backwards; }
-.ss-item { position: absolute; display: block; box-shadow: 0 1px 4px rgba(0, 0, 0, .35); animation: gz-pop 8s ease-out infinite backwards; }
-@keyframes ss-line { 0% { opacity: 0; } 3%, 34% { opacity: 1; } 38%, 100% { opacity: 0; } }
-@keyframes gz-pop { 0% { opacity: 0; scale: .2; } 4% { opacity: 1; scale: 1.25; } 7% { scale: 1; } 80% { opacity: 1; scale: 1; } 88%, 100% { opacity: 0; scale: 1; } }
+.ss-card > img, .ss-card > canvas { display: block; width: 100%; }
 .card-fallback { display: grid; place-items: center; min-height: 160px; font-size: 64px; }
 .stage3d { container-type: inline-size; position: relative; max-width: 420px; margin: 8px auto; overflow: hidden; border: 1px solid var(--line); min-height: 200px; }
 .stage3d canvas { display: block; width: 100%; height: auto; cursor: crosshair; }
@@ -440,5 +436,9 @@ h1 { font-size: 34px; margin: 8px 0 16px; }
 footer { padding: 12px 84px 12px 16px; text-align: center; font-size: 12px; color: var(--muted); background: var(--panel); }
 .confetti { position: fixed; top: -12px; width: 9px; height: 14px; animation: fall 3.5s linear forwards; pointer-events: none; }
 @keyframes fall { to { transform: translateY(105vh) rotate(540deg); opacity: .6; } }
-@media (prefers-reduced-motion: reduce) { .confetti { display: none; } .stamp { animation: none; } .ladder polyline.run { animation-duration: .01s; } .fry-chef.cook, .ss-line, .ss-item, .gz-ring, .push, .push.leaving, .q-bar, .app-stamp, .office-news li.flash, .meme-bubble, .meme-end-pic, .card3d, .stage3d .peach-cap { animation: none; } .push.leaving { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .confetti { display: none; } .stamp { animation: none; } .ladder polyline.run { animation-duration: .01s; } .fry-chef.cook, .gz-ring, .push, .push.leaving, .q-bar, .app-stamp, .office-news li.flash, .meme-bubble, .meme-end-pic, .card3d, .stage3d .peach-cap { animation: none; } .push.leaving { opacity: 0; } }
 .pcard small:empty { display: none; }
+.dl-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+.dl-row button { padding: 7px 2px; font: inherit; font-size: 14px; font-weight: 700; color: #fff; background: linear-gradient(var(--green), var(--green-dark)); border: 0; cursor: pointer; }
+.dl-row button:disabled { background: #bbb; cursor: default; }
+.dlmsg { min-height: 1.4em; }

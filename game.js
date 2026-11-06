@@ -667,14 +667,20 @@ function renderMatch() {
   };
   const slotOf = (id) => Object.keys(S.matched).find((i) => S.matched[i] === id);
   const toTray = (id) => {
+    delete (S.matchAt ||= {})[slotOf(id)];
     delete S.matched[slotOf(id)];
     matchPick = null;
     redraw();
   };
   // A slot holds one icon: whatever was there goes back to the tray.
   const place = (id, i) => {
-    if (slotOf(id) !== undefined) delete S.matched[slotOf(id)];
+    S.matchAt ||= {};
+    if (slotOf(id) !== undefined) {
+      delete S.matchAt[slotOf(id)];
+      delete S.matched[slotOf(id)];
+    }
     S.matched[i] = id;
+    S.matchAt[i] = Date.now();
     matchPick = null;
     redraw();
   };
@@ -744,7 +750,313 @@ function renderMatch() {
 }
 
 // Draws one card as a PNG. Pictures only work once the site is online: browsers block reading local files into a canvas.
-async function downloadCard(card) {
+// ---------- Card downloads: still card, GIF, boomerang, video ----------
+// Each animated card is redrawn frame by frame on a canvas, so all four formats come from one drawing.
+
+// A small GIF89a writer: fixed 252-colour palette with ordered dithering, LZW, loops forever.
+// Pixels that match the previous frame are left transparent, so a still background costs almost nothing.
+function GifWriter(w, h, fps) {
+  const out = [], byte = (x) => out.push(x & 255), word = (x) => { byte(x); byte(x >> 8); };
+  [..."GIF89a"].forEach((ch) => byte(ch.charCodeAt(0)));
+  word(w); word(h); byte(0xf7); byte(0); byte(0);
+  for (let i = 0; i < 256; i++) {                       // 6 reds x 7 greens x 6 blues, then 4 unused
+    const r = Math.floor(i / 42), g = Math.floor((i % 42) / 6), b = i % 6;
+    if (i < 252) { byte(r * 51); byte(Math.round(g * 42.5)); byte(b * 51); } else { byte(0); byte(0); byte(0); }
+  }
+  [0x21, 0xff, 0x0b, ..."NETSCAPE2.0".split("").map((c) => c.charCodeAt(0)), 0x03, 0x01, 0, 0, 0].forEach(byte);
+  const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+  const delay = Math.round(100 / fps);
+  let shown = null;
+  this.addFrame = (rgba) => {
+    const px = new Uint8Array(w * h);
+    for (let y = 0, p = 0; y < h; y++) {
+      for (let x = 0; x < w; x++, p++) {
+        const d = BAYER[(y & 3) * 4 + (x & 3)] / 16 - 0.47, q = p * 4;
+        const r = Math.min(5, Math.max(0, Math.round(rgba[q] / 51 + d)));
+        const g = Math.min(6, Math.max(0, Math.round(rgba[q + 1] / 42.5 + d)));
+        const b = Math.min(5, Math.max(0, Math.round(rgba[q + 2] / 51 + d)));
+        px[p] = r * 42 + g * 6 + b;
+      }
+    }
+    const enc = px.map((v, p) => (shown && shown[p] === v ? 255 : v));
+    shown = px;
+    [0x21, 0xf9, 0x04, 0x05].forEach(byte); word(delay); byte(255); byte(0);
+    byte(0x2c); word(0); word(0); word(w); word(h); byte(0);
+    byte(8);
+    const data = [], CLEAR = 256, END = 257, dict = new Map();
+    let size = 9, next = 258, acc = 0, bits = 0;
+    const emit = (code) => {
+      acc |= code << bits;
+      bits += size;
+      while (bits >= 8) { data.push(acc & 255); acc >>>= 8; bits -= 8; }
+      if (code === CLEAR) size = 9;
+      else if (next > (1 << size) - 1 && size < 12) size++;
+    };
+    emit(CLEAR);
+    let prefix = enc[0];
+    for (let i = 1; i < enc.length; i++) {
+      const k = enc[i], key = prefix * 256 + k, hit = dict.get(key);
+      if (hit !== undefined) { prefix = hit; continue; }
+      emit(prefix);
+      if (next < 4096) dict.set(key, next++);
+      else { next = 258; emit(CLEAR); dict.clear(); }
+      prefix = k;
+    }
+    emit(prefix);
+    emit(END);
+    if (bits > 0) data.push(acc & 255);
+    for (let i = 0; i < data.length; i += 255) {
+      const n = Math.min(255, data.length - i);
+      byte(n);
+      for (let j = 0; j < n; j++) out.push(data[i + j]);
+    }
+    byte(0);
+  };
+  this.finish = () => { byte(0x3b); return new Uint8Array(out); };
+}
+
+const pickMime = () => ["video/mp4;codecs=avc1.42E01E", "video/mp4", "video/webm;codecs=vp9", "video/webm"].find((t) => window.MediaRecorder && MediaRecorder.isTypeSupported(t));
+const easeInOut = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+const bumpAt = (t, a, b, c, d) => easeInOut((t - a) / (b - a)) * (1 - easeInOut((t - c) / (d - c)));
+const backOut = (t) => { const c = 2.2; return t >= 1 ? 1 : 1 + (c + 1) * (t - 1) ** 3 + c * (t - 1) ** 2; };
+const svgImage = (svg) => loadImage("data:image/svg+xml," + encodeURIComponent(svg));
+const newCanvas = (w, h) => Object.assign(document.createElement("canvas"), { width: w, height: h });
+
+// eight 來eight 棒: the same throw, chomp and ring as on the page, drawn for time t.
+async function gyozaSource() {
+  const gc = GYOZA_CARD, W = 450, H = Math.round(W * gc.tall), canvas = newCanvas(W, H), g = canvas.getContext("2d");
+  const [bg, A, E] = await Promise.all([gc.bg, gc.a, gc.eight].map(loadImage));
+  const food = {};
+  for (const t of ["gyoza", "xlb", "bun"]) food[t] = await svgImage(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 46" width="128" height="92">${foodSvg(t)}</svg>`);
+  const got = S.fry || {}, order = [...Array(8).fill("gyoza"), ...Array(got.xlb || 0).fill("xlb"), ...Array(got.bun || 0).fill("bun")];
+  const THROW = 1300, COUNT = order.length, D = THROW * COUNT + 2200, size = Math.max(7, 14 * Math.sqrt(8 / COUNT));
+  const aw = 0.315 * W, ah = (aw * A.height) / A.width, ax = 0.0235 * W, ay = 0.527 * H;
+  const ew = 0.353 * W, eh = (ew * E.height) / E.width, ex = 0.464 * W, ey = 0.476 * H;
+  const cw = 0.95 * aw, ch = cw * 0.6, sw = 0.963 * ew;
+  const matA = (bend) => new DOMMatrix().translate(ax + 0.04 * aw * bend, ay).translate(aw / 2, ah).rotate(16 * bend).translate(-aw / 2, -ah);
+  const matChop = (bend, flick) => matA(bend).translate(-0.02 * aw, -0.04 * ah).translate(0.06 * cw, 0.18 * ch).rotate(-18 * flick).translate(-0.06 * cw, -0.18 * ch).scale(cw / 100);
+  const mat8 = (open) => new DOMMatrix().translate(ex, ey).translate(ew / 2, eh).rotate(-6 * open).translate(-ew / 2, -eh);
+  const matSign = (open) => mat8(open).translate(0.0208 * ew, 0.0176 * eh).scale(sw / 208).translate(4, 4);
+  const tip0 = matChop(1, 1).transformPoint({ x: 88, y: 38 }), mouth0 = matSign(0).transformPoint({ x: 100, y: 101 });
+  const stick = (x1, y1, x2, y2) => {
+    for (const [c, wd] of [["#3a2a1a", 6], ["#f3c98b", 4]]) { g.strokeStyle = c; g.lineWidth = wd; g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke(); }
+  };
+  const render = (time) => {
+    const t = time % D, n = Math.floor(t / THROW), k = t - n * THROW, active = n < COUNT;
+    const bend = active ? bumpAt(k, 0, 330, 700, 1150) : 0, flick = active ? bumpAt(k, 220, 330, 360, 520) : 0;
+    const open = active ? bumpAt(k, 560, 720, 860, 1020) : 0, empty = active && k > 340 && k < 1000;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.drawImage(bg, 0, 0, W, H);
+    g.setTransform(matA(bend)); g.drawImage(A, 0, 0, aw, ah);
+    g.setTransform(matChop(bend, flick)); g.lineCap = "round";
+    stick(6, 6, 86, 34);
+    g.save(); g.translate(4, 16); g.rotate(((empty ? 26 : 0) * Math.PI) / 180); g.translate(-4, -16); stick(4, 16, 84, 42); g.restore();
+    if (!empty) {
+      g.setTransform(matChop(bend, flick).translate(88, 38).rotate(18).scale(0.5).translate(-32, -26));
+      g.drawImage(food[order[active ? (k > 340 ? n + 1 : n) : 0] || "gyoza"], 0, 0, 64, 46);
+    }
+    g.setTransform(mat8(open)); g.drawImage(E, 0, 0, ew, eh);
+    g.setTransform(matSign(open));
+    g.fillStyle = "#fff"; g.strokeStyle = "#111"; g.lineWidth = 4; g.beginPath(); g.arc(100, 100, 99, 0, Math.PI * 2); g.fill(); g.stroke();
+    g.strokeStyle = "#d33a3a"; g.lineWidth = 7; g.beginPath(); g.arc(100, 100, 84, 0, Math.PI * 2); g.stroke();
+    g.fillStyle = "#d33a3a"; g.font = '900 118px "Arial Black", Arial, sans-serif'; g.textAlign = "center"; g.textBaseline = "middle";
+    for (const [y0, hh, dy] of [[0, 101, -22], [101, 99, 22]]) { g.save(); g.beginPath(); g.rect(0, y0, 200, hh); g.clip(); g.fillText("8", 100, 104 + dy * open); g.restore(); }
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    const fw = 0.125 * W;
+    if (active && k >= 340 && k < 720) {                 // the throw in flight
+      const s = (k - 340) / 380, x = tip0.x + (mouth0.x - tip0.x) * s, y = tip0.y + (mouth0.y - tip0.y) * s - W * 0.07 * Math.sin(Math.PI * s);
+      const sc = s < 0.9 ? 1 - s * 0.3 : 0.73 - ((s - 0.9) / 0.1) * 0.48;
+      g.save(); g.translate(x, y); g.rotate((s * 200 * Math.PI) / 180); g.scale(sc, sc); g.drawImage(food[order[n]], -fw / 2, (-fw * 46) / 64 / 2, fw, (fw * 46) / 64); g.restore();
+    }
+    for (let j = 0; j < COUNT; j++) {                    // everything eaten so far, ringed around the head
+      const p = (t - (j * THROW + 980)) / 500;
+      if (p < 0) continue;
+      const a = (j / COUNT) * Math.PI * 2 - Math.PI / 2, rw = (size / 100) * W;
+      const x = (W * (gc.ring.x + gc.ring.r * Math.cos(a))) / 100, y = (H * (gc.ring.y + (gc.ring.r * Math.sin(a)) / gc.tall)) / 100;
+      const sc = p >= 1 ? 1 : p < 0.6 ? 0.2 + (p / 0.6) * 1.05 : 1.25 - ((p - 0.6) / 0.4) * 0.25;
+      g.save(); g.globalAlpha = Math.min(1, p / 0.6); g.translate(x, y); g.scale(sc, sc); g.drawImage(food[order[j]], -rw / 2, (-rw * 46) / 64 / 2, rw, (rw * 46) / 64); g.restore();
+    }
+  };
+  return { canvas, duration: D, segment: [0, THROW], render };
+}
+
+// Incense smoke over the 普渡 table: soft puffs rise from each stick and drift up-left, repeating every 4 s.
+function drawSmoke(g, W, H, time) {
+  for (const [sx, sy, rise, n] of SANSHENG_CARD.smoke) {
+    for (let i = 0; i < n; i++) {
+      const p = ((time / 4000) + i / n) % 1, sway = Math.sin(p * 7 + i * 2.3);
+      const x = (sx / 100) * W - p * 0.16 * W + sway * 0.012 * W, y = (sy / 100) * H - p * (rise / 100) * H;
+      const r = (0.008 + p * 0.05) * W, a = 0.62 * Math.min(1, p * 6) * (1 - p) ** 1.3;
+      const puff = g.createRadialGradient(x, y, 0, x, y, r);
+      puff.addColorStop(0, `rgba(250,250,247,${a})`);
+      puff.addColorStop(1, "rgba(250,250,247,0)");
+      g.fillStyle = puff;
+      g.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+  }
+}
+
+// 中超style 三牲: the two lines type out one character at a time, then the six products pop in
+// in the order she placed them in 三牲連連看. The lines are drawn last, so no product ever covers them.
+async function sanshengSource(width = 540) {
+  const sc = SANSHENG_CARD, bg = await loadImage(sc.bg), items = await Promise.all(sc.items.map(([src]) => loadImage(src)));
+  const W = Math.round(width), H = Math.round((W * bg.height) / bg.width), canvas = newCanvas(W, H), g = canvas.getContext("2d");
+  const TYPE = 90, LOOP = 10000, chars = sc.lines.map((line) => [...line]);
+  const lineAt = [300, 300 + chars[0].length * TYPE + 350];
+  const popAt = lineAt[1] + chars[1].length * TYPE + 400, GAP = 350;
+  const placedAt = S.matchAt || {}, order = sc.items.map((_, n) => n).sort((a, b) => (placedAt[sc.items[a][4]] ?? 1e15 + a) - (placedAt[sc.items[b][4]] ?? 1e15 + b));
+  const render = (time) => {
+    const t = time % LOOP, fade = 1 - easeInOut((t - 8700) / 600);
+    g.globalAlpha = 1; g.drawImage(bg, 0, 0, W, H);
+    drawSmoke(g, W, H, t);
+    order.forEach((n, step) => {
+      const [, x, y, w] = sc.items[n], p = (t - (popAt + step * GAP)) / 1000;
+      if (p < 0) return;
+      const iw = (w / 100) * W, ih = (iw * items[n].height) / items[n].width, s = p < 0.32 ? 0.2 + (p / 0.32) * 1.05 : p < 0.56 ? 1.25 - ((p - 0.32) / 0.24) * 0.25 : 1;
+      g.save(); g.globalAlpha = Math.min(1, p / 0.32) * fade; g.translate((x / 100) * W + iw / 2, (y / 100) * H + ih / 2); g.scale(s, s);
+      g.shadowColor = "rgba(0,0,0,.35)"; g.shadowBlur = 4; g.shadowOffsetY = 1; g.drawImage(items[n], -iw / 2, -ih / 2, iw, ih); g.restore();
+    });
+    const fs = 0.046 * W;
+    g.font = `700 ${fs}px "Noto Sans TC", sans-serif`; g.textBaseline = "middle";
+    chars.forEach((line, n) => {
+      const shown = line.slice(0, Math.floor((t - lineAt[n]) / TYPE) + 1).join("");
+      if (t < lineAt[n] || !shown) return;
+      const bw = g.measureText(shown).width + 0.032 * W, bh = fs * 1.35 + 0.008 * W, x = 0.03 * W, y = (0.11 + n * 0.16) * H;
+      g.globalAlpha = fade; g.fillStyle = "#111"; g.fillRect(x, y, bw, bh); g.fillStyle = "#fff"; g.fillText(shown, x + 0.016 * W, y + bh / 2);
+    });
+    g.globalAlpha = 1;
+  };
+  return { canvas, duration: LOOP, segment: [popAt - 200, popAt + 5 * GAP + 700], render };
+}
+
+// The card on the page is the same drawing as the downloads, sized for the screen.
+async function playSansheng(holder) {
+  const src = await sanshengSource(Math.min(1400, holder.clientWidth * devicePixelRatio));
+  src.canvas.setAttribute("role", "img");
+  src.canvas.setAttribute("aria-label", holder.dataset.label);
+  holder.replaceChildren(src.canvas);
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return src.render(8000);
+  const start = performance.now();
+  const frame = (now) => {
+    if (!src.canvas.isConnected) return;
+    src.render(now - start);
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+}
+
+// 壽桃塔卡: the 3D view is real-time, so its frames are captured as it plays, with the caption drawn on top.
+async function peachSource() {
+  const gl = document.querySelector("#cardpeach canvas");
+  if (!gl || !cardPeach) throw new Error("3D view not ready");
+  clearInterval(cardTimer);
+  const W = 360, H = Math.round((W * gl.height) / gl.width), fps = 12, frames = [];
+  cardPeach.replay();
+  const t0 = performance.now();
+  while (performance.now() - t0 < 3600) {
+    await new Promise((r) => requestAnimationFrame(r));
+    const t = performance.now() - t0, f = newCanvas(W, H), g = f.getContext("2d");
+    g.drawImage(gl, 0, 0, W, H);
+    if (t > 900) {
+      const s = 0.42 + 0.58 * backOut(Math.min(1, (t - 900) / 1000)), fs = 0.096 * W;
+      g.save(); g.translate(W / 2, H * 0.45); g.scale(s, s);
+      g.font = `900 ${fs}px "Noto Sans TC", sans-serif`; g.textAlign = "center"; g.textBaseline = "middle";
+      const tw = g.measureText(PEACH.caption).width;
+      g.fillStyle = "#fff"; g.fillRect(-tw / 2 - 0.02 * W, -fs * 0.6 - 0.004 * W, tw + 0.04 * W, fs * 1.2 + 0.008 * W);
+      g.fillStyle = "#111"; g.fillText(PEACH.caption, 0, 0); g.restore();
+    }
+    frames.push([t, f]);
+  }
+  cardTimer = setInterval(() => (gl.isConnected ? cardPeach.replay() : clearInterval(cardTimer)), 5000);
+  const canvas = newCanvas(W, H), g = canvas.getContext("2d");
+  const render = (time) => g.drawImage((frames.find(([t]) => t >= time) || frames[frames.length - 1])[1], 0, 0);
+  return { canvas, duration: 3600, segment: [0, 2400], render };
+}
+
+async function cardSource(card) {
+  if (card.anim === "gyoza") return gyozaSource();
+  if (card.anim === "sansheng") return sanshengSource();
+  if (card.anim === "peach") return peachSource();
+  if (card.key === "meme") return recordMeme(false, null, true);
+  throw new Error("not animated");
+}
+
+async function makeGif(src, onProgress) {
+  const fps = 10, w = 320, h = Math.round((w * src.canvas.height) / src.canvas.width), out = newCanvas(w, h), g = out.getContext("2d", { willReadFrequently: true });
+  const gif = new GifWriter(w, h, fps), n = Math.round((src.duration / 1000) * fps);
+  for (let i = 0; i < n; i++) {
+    await src.render((i * 1000) / fps);
+    g.drawImage(src.canvas, 0, 0, w, h);
+    gif.addFrame(g.getImageData(0, 0, w, h).data);
+    onProgress(i / n);
+    await new Promise((r) => setTimeout(r));
+  }
+  return { blob: new Blob([gif.finish()], { type: "image/gif" }), ext: "gif" };
+}
+
+// Plays the given times onto a canvas in real time while recording it.
+async function makeVideo(src, times, onProgress) {
+  const mime = pickMime(), fps = 12;
+  const w = Math.min(540, src.canvas.width), h = Math.round((w * src.canvas.height) / src.canvas.width), out = newCanvas(w, h), g = out.getContext("2d");
+  if (!mime || !out.captureStream) throw new Error("no recorder");
+  await src.render(times[0]); g.drawImage(src.canvas, 0, 0, w, h);
+  const rec = new MediaRecorder(out.captureStream(fps), { mimeType: mime, videoBitsPerSecond: 2500000 }), chunks = [];
+  rec.ondataavailable = (e) => chunks.push(e.data);
+  rec.start();
+  for (let i = 0; i < times.length; i++) {
+    await src.render(times[i]);
+    g.drawImage(src.canvas, 0, 0, w, h);
+    onProgress(i / times.length);
+    await new Promise((r) => setTimeout(r, 1000 / fps));
+  }
+  await new Promise((r) => { rec.onstop = r; rec.stop(); });
+  return { blob: new Blob(chunks, { type: mime }), ext: mime.includes("mp4") ? "mp4" : "webm" };
+}
+const fullTimes = (src) => Array.from({ length: Math.round((src.duration / 1000) * 12) }, (_, i) => (i * 1000) / 12);
+// Boomerang: the best moment forward, then backward, three times.
+const boomTimes = ([a, b]) => {
+  const fwd = Array.from({ length: Math.round(((b - a) / 1000) * 12) + 1 }, (_, i) => a + (i * 1000) / 12);
+  const once = [...fwd, ...fwd.slice(1, -1).reverse()];
+  return [...once, ...once, ...once];
+};
+
+function saveBlob(blob, name) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+}
+
+const dlButtons = (i) => `<div class="dl-row">${Object.entries(DOWNLOAD.kinds).map(([k, label]) => `<button data-dl="${k}" data-i="${i}">${label}</button>`).join("")}</div>
+  <p class="err dlmsg" role="status"></p>`;
+
+async function runDownload(btn) {
+  const card = CARDS[+btn.dataset.i], kind = btn.dataset.dl, row = btn.closest(".pcard"), msg = row.querySelector(".dlmsg");
+  const buttons = [...row.querySelectorAll("[data-dl]")], say = (done) => (msg.textContent = `${DOWNLOAD.busy} ${Math.round(done * 100)}%`);
+  buttons.forEach((b) => (b.disabled = true));
+  msg.textContent = DOWNLOAD.busy;
+  try {
+    if (kind === "png") {
+      let still = null;
+      if (card.key === "meme") { const src = await cardSource(card); await src.render(2500); still = src.canvas.toDataURL("image/png"); }
+      await downloadCard(card, still);
+    } else if (kind === "video" && card.key === "meme") {
+      const { blob, ext } = await recordMeme(true, say);
+      saveBlob(blob, `${card.title}-${DOWNLOAD.kinds.video}.${ext}`);
+    } else {
+      const src = await cardSource(card);
+      const { blob, ext } = kind === "gif" ? await makeGif(src, say) : await makeVideo(src, kind === "boom" ? boomTimes(src.segment) : fullTimes(src), say);
+      saveBlob(blob, `${card.title}-${DOWNLOAD.kinds[kind]}.${ext}`);
+    }
+    msg.textContent = "";
+  } catch {
+    msg.textContent = DOWNLOAD.fail;
+  }
+  buttons.forEach((b) => (b.disabled = false));
+}
+
+async function downloadCard(card, still = null) {
   const c = document.createElement("canvas");
   c.width = 600;
   c.height = 840;
@@ -758,7 +1070,7 @@ async function downloadCard(card) {
   g.fillStyle = "#038c00";
   g.font = '900 44px "Noto Sans TC", sans-serif';
   g.fillText(card.title, 300, 100);
-  const src = card.anim === "peach" && cardPeach ? cardPeach.snapshot() : card.img;
+  const src = still || (card.anim === "peach" && cardPeach ? cardPeach.snapshot() : card.img);
   if (src) {
     const img = new Image();
     img.src = src;
@@ -811,18 +1123,14 @@ function renderDownload() {
     }
     if (c.key === "meme") {
       return `<li class="pcard wide">${memeEnding("dlfront")}<b>${c.title}</b><small>${c.text.replace(/\n/g, "<br>")}</small>
-        <button class="btn" data-video="full">${STUDENT_CARD.meme.videoFull}</button>
-        <button class="btn alt" data-video="ending">${STUDENT_CARD.meme.videoEnding}</button>
-        <p class="err" id="videomsg" role="status"></p></li>`;
+        ${dlButtons(i)}</li>`;
     }
     if (c.anim === "sansheng") {
       const sc = SANSHENG_CARD;
-      return `<li class="pcard wide"><div class="ss-card">
-          <img src="${sc.bg}" alt="普渡供桌，擺滿零食和供品">
-          ${sc.lines.map((t, n) => `<b class="ss-line" style="top:${11 + n * 16}%;animation-delay:${0.4 + n * 1}s">${t}</b>`).join("")}
-          ${sc.items.map(([src, x, y, w], n) => `<img class="ss-item" src="${src}" alt="" style="left:${x}%;top:${y}%;width:${w}%;animation-delay:${3.2 + n * 0.25}s">`).join("")}
+      return `<li class="pcard wide"><div class="ss-card" id="sscard" data-label="普渡供桌，香煙裊裊，打出「${sc.lines.join("，")}」，六樣三牲依序出現">
+          <img src="${sc.bg}" alt="">
         </div><b>${c.title}</b><small>${c.text}</small>
-        <button class="btn" data-i="${i}">下載卡片</button></li>`;
+        ${dlButtons(i)}</li>`;
     }
     if (c.anim === "gyoza") {
       const gc = GYOZA_CARD, stick = (d) => `<path d="${d}" stroke="#3a2a1a" stroke-width="6"/><path d="${d}" stroke="#f3c98b" stroke-width="4"/>`;
@@ -843,11 +1151,11 @@ function renderDownload() {
               <circle id="gzmouth" cx="100" cy="101" r=".1" fill="none"/>
             </svg></div>
         </div><b>${c.title}</b><small>${c.text}</small>
-        <button class="btn" data-i="${i}">下載卡片</button></li>`;
+        ${dlButtons(i)}</li>`;
     }
     if (c.anim === "peach") {
       return `<li class="pcard wide"><div class="stage3d card-stage" id="cardpeach"><span class="card-fallback">🍑</span></div><b>${c.title}</b><small>${c.text}</small>
-        <button class="btn" data-i="${i}">下載卡片</button></li>`;
+        ${dlButtons(i)}</li>`;
     }
     const pic = c.img ? `<img src="${c.img}" alt="">` : "";
     return `<li class="pcard"><div class="face">${pic || c.emoji || "✉"}</div><b>${c.title}</b><small>${c.text}</small>
@@ -856,11 +1164,12 @@ function renderDownload() {
   shell("支線任務", "下載專區", `
     <p class="notice">已解鎖 ${count} / ${CARDS.length} 張。完成任務就能解鎖新卡片。</p>
     <ul class="pcards">${items}</ul>`);
-  app.querySelectorAll("[data-i]").forEach((b) => {
+  app.querySelectorAll("[data-i]:not([data-dl])").forEach((b) => {
     b.onclick = () => downloadCard(CARDS[+b.dataset.i]);
   });
   if (document.getElementById("dlfront")) paintCardFront(document.getElementById("dlfront"));
   if (document.getElementById("gzcard")) playGyozaCard(document.getElementById("gzcard"));
+  if (document.getElementById("sscard")) playSansheng(document.getElementById("sscard")).catch(() => {});
   const peachEl = document.getElementById("cardpeach");
   if (peachEl) {
     loadThree().then(() => {
@@ -876,24 +1185,8 @@ function renderDownload() {
       cardTimer = setInterval(() => (peachEl.isConnected ? view3d.replay() : clearInterval(cardTimer)), 5000);
     }).catch(() => {});
   }
-  const videoButtons = [...app.querySelectorAll("[data-video]")];
-  videoButtons.forEach((b) => {
-    b.onclick = async () => {
-      const m = STUDENT_CARD.meme, msg = document.getElementById("videomsg"), full = b.dataset.video === "full";
-      videoButtons.forEach((x) => (x.disabled = true));
-      try {
-        const { blob, ext } = await recordMeme(full, (done) => (msg.textContent = `${m.videoBusy} ${Math.round(done * 100)}%`));
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = `炫炮學生證-${full ? "完整" : "結尾"}.${ext}`;
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(a.href), 60000);
-        msg.textContent = "";
-      } catch {
-        msg.textContent = m.videoFail;
-      }
-      videoButtons.forEach((x) => (x.disabled = false));
-    };
+  app.querySelectorAll("[data-dl]").forEach((b) => {
+    b.onclick = () => runDownload(b);
   });
 }
 
@@ -1384,11 +1677,11 @@ function renderDormVote() {
 }
 
 // Draws the sequence on a canvas and records it in real time, so a 30-second animation takes 30 seconds to make.
-async function recordMeme(full, onProgress) {
+async function recordMeme(full, onProgress, asSource = false) {
   const c = S.card, sc = STUDENT_CARD, m = sc.meme, W = 566, H = 800;
   const mime = ["video/mp4;codecs=avc1.42E01E", "video/mp4", "video/webm;codecs=vp9", "video/webm"].find((t) => window.MediaRecorder && MediaRecorder.isTypeSupported(t));
   const canvas = document.createElement("canvas");
-  if (!mime || !canvas.captureStream) throw new Error("no recorder");
+  if (!asSource && (!mime || !canvas.captureStream)) throw new Error("no recorder");
   canvas.width = W;
   canvas.height = H;
   const g = canvas.getContext("2d");
@@ -1529,6 +1822,7 @@ async function recordMeme(full, onProgress) {
     g.restore();
   };
 
+  if (asSource) return { canvas, duration: MEME_END_MS, segment: [0, 1500], render: drawEnding };
   const talkMs = steps.reduce((sum, step) => sum + memeStepMs(step), 0);
   const appMs = full ? MEME_APP_MS : 0, total = talkMs + appMs + MEME_END_MS;
   if (full) drawTalk(steps[0]);
