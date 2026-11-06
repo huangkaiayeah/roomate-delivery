@@ -284,6 +284,74 @@ const FRY_ART = {
     <rect class="green" x="27" y="31" width="4.5" height="2.4" rx="1.2"/>`,
 };
 
+const GZ_FILL = {
+  dough: 'fill="#fbf2df" stroke="#7a5a3a" stroke-width="1.5"', crust: 'fill="#c46d22"', pleat: 'fill="none" stroke="#7a5a3a" stroke-width="1.4"',
+  green: 'fill="#63b33a"', shine: 'fill="#fff" opacity=".75"',
+};
+const foodSvg = (type) => FRY_ART[type].replace(/class="([a-z]+)[^"]*"/g, (_, c) => GZ_FILL[c]);
+
+// eight 來eight 棒: A bends over and throws, the 8 opens at its waist and eats; each 煎餃 eaten joins the ring.
+function playGyozaCard(card) {
+  const $ = (id) => document.getElementById(id), gc = GYOZA_CARD;
+  const ease = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+  const bump = (t, a, b, c, d) => ease((t - a) / (b - a)) * (1 - ease((t - c) / (d - c)));
+  const at = (el) => { const r = el.getBoundingClientRect(), w = card.getBoundingClientRect(); return [r.left + r.width / 2 - w.left, r.top + r.height / 2 - w.top]; };
+  const svg = (type) => `<svg viewBox="0 0 64 46">${foodSvg(type)}</svg>`;
+  // 8 煎餃 for the ring, then the 小籠包 and 水煎包 she picked up in the game
+  const got = S.fry || {}, order = [...Array(8).fill("gyoza"), ...Array(got.xlb || 0).fill("xlb"), ...Array(got.bun || 0).fill("bun")];
+  const THROW = 1300, COUNT = order.length, PAUSE = 2200;
+  const size = Math.max(7, 14 * Math.sqrt(8 / COUNT)); // everything eaten shares the ring, so pieces shrink when there are many
+  const start = performance.now();
+  let thrown = -1, eaten = 0;
+  const frame = (now) => {
+    if (!card.isConnected) return;
+    const t = (now - start) % (THROW * COUNT + PAUSE), n = Math.floor(t / THROW), k = t - n * THROW, active = n < COUNT;
+    if (t < THROW && eaten === COUNT) {                       // a new round: clear the ring
+      card.querySelectorAll(".gz-ring").forEach((e) => e.remove());
+      eaten = 0;
+    }
+    const bend = active ? bump(k, 0, 330, 700, 1150) : 0, flick = active ? bump(k, 220, 330, 360, 520) : 0;
+    const open = active ? bump(k, 560, 720, 860, 1020) : 0, empty = active && k > 340 && k < 1000;
+    $("gzA").style.rotate = `${16 * bend}deg`;
+    $("gzA").style.translate = `${4 * bend}% 0`;
+    $("gzchop").style.rotate = `${-18 * flick}deg`;
+    $("gzstickB").setAttribute("transform", `rotate(${empty ? 26 : 0} 4 16)`);
+    $("gzheld").style.opacity = empty ? 0 : 1;
+    const next = order[active ? (k > 340 ? n + 1 : n) : 0] || "gyoza";   // what is on the chopsticks now
+    if ($("gzheld").dataset.type !== next) {
+      $("gzheld").dataset.type = next;
+      $("gzheld").innerHTML = foodSvg(next);
+    }
+    $("gz8").style.rotate = `${-6 * open}deg`;
+    $("gztop").setAttribute("transform", `translate(0 ${-22 * open})`);
+    $("gzbot").setAttribute("transform", `translate(0 ${22 * open})`);
+    if (active && k >= 340 && thrown !== n) {
+      thrown = n;
+      const [x0, y0] = at($("gztip")), [x1, y1] = at($("gzmouth")), W = card.clientWidth;
+      const fly = document.createElement("span");
+      fly.className = "gz-fly";
+      fly.innerHTML = svg(order[n]);
+      card.append(fly);
+      fly.animate(Array.from({ length: 11 }, (_, i) => { const s = i / 10; return { left: `${x0 + (x1 - x0) * s}px`, top: `${y0 + (y1 - y0) * s - W * 0.07 * Math.sin(Math.PI * s)}px`, rotate: `${s * 200}deg`, scale: i === 10 ? 0.25 : 1 - s * 0.3 }; }),
+        { duration: 380, fill: "forwards" }).onfinish = () => fly.remove();
+      setTimeout(() => {                                     // swallowed: it joins the ring around the head
+        if (!card.isConnected) return;
+        const a = (n / COUNT) * Math.PI * 2 - Math.PI / 2, dot = document.createElement("span");
+        dot.className = "gz-ring";
+        dot.innerHTML = svg(order[n]);
+        dot.style.width = `${size}%`;
+        dot.style.left = `${gc.ring.x + gc.ring.r * Math.cos(a)}%`;
+        dot.style.top = `${gc.ring.y + (gc.ring.r * Math.sin(a)) / gc.tall}%`;
+        card.append(dot);
+        eaten = n + 1;
+      }, 640);
+    }
+    if (!active) thrown = -1;
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+}
+
 function renderEat() {
   if (!taskGuard("eat")) return;
   const title = TASKS.eat.title;
@@ -332,6 +400,7 @@ function playFry() {
   const nextCook = pans.map(() => Math.random() * lo);
   const startedAt = performance.now();
   let eaten = 0, over = false;
+  const picked = { gyoza: 0, xlb: 0, bun: 0 }; // cooked food she picked up this round, kept if she wins
   const say = (text) => (document.getElementById("frymsg").textContent = text);
   const slotEl = (p, i) => kitchen.querySelector(`[data-pan="${p}"][data-i="${i}"]`);
   const clear = (p, i) => {
@@ -357,12 +426,14 @@ function playFry() {
     setTimeout(() => chop.remove(), 300);
     clear(p, i);
     if (stage === "burnt") return say(FRY.burnt);
+    picked[item.type]++;
     if (item.type !== "gyoza") return say(FRY.notGyoza);
     eaten++;
     say(FRY.got);
     document.getElementById("frycount").textContent = `🥟 ${eaten} / ${FRY.goal}`;
     if (eaten >= FRY.goal) {
       over = true;
+      S.fry = picked;
       finishTask("eat");
     }
   };
@@ -754,13 +825,23 @@ function renderDownload() {
         <button class="btn" data-i="${i}">下載卡片</button></li>`;
     }
     if (c.anim === "gyoza") {
-      const { ring } = GYOZA_CARD, tall = 1685 / 900;
-      return `<li class="pcard wide"><div class="meme-end-pic gz-card">
-          <img src="${c.img}" alt="8包煎餃拼到底看板與街頭拜票照，人臉都以手繪頭像遮住">
-          ${Array.from({ length: 8 }, (_, i) => {
-            const a = (i / 8) * Math.PI * 2 - Math.PI / 2;
-            return `<span class="fry-slot gyoza ready gz-dumpling" style="left:${ring.x + ring.r * Math.cos(a)}%;top:${ring.y + (ring.r * Math.sin(a)) / tall}%;animation-delay:${0.4 + i * 0.22}s"><svg viewBox="0 0 64 46" aria-hidden="true">${FRY_ART.gyoza}</svg></span>`;
-          }).join("")}
+      const gc = GYOZA_CARD, stick = (d) => `<path d="${d}" stroke="#3a2a1a" stroke-width="6"/><path d="${d}" stroke="#f3c98b" stroke-width="4"/>`;
+      return `<li class="pcard wide"><div class="gz-card" id="gzcard">
+          <img src="${gc.bg}" alt="8包煎餃拼到底看板前，兩個手繪人物：一個用筷子丟煎餃，另一個舉著8號牌接住吃掉">
+          <div class="gz-fig gz-a" id="gzA"><img src="${gc.a}" alt="">
+            <svg class="gz-chop" id="gzchop" viewBox="0 0 100 60" overflow="visible" aria-hidden="true">
+              <g stroke-linecap="round">${stick("M6 6 L86 34")}<g id="gzstickB">${stick("M4 16 L84 42")}</g></g>
+              <g id="gzheld" transform="translate(88 38) rotate(18) scale(.5) translate(-32 -26)">${foodSvg("gyoza")}</g>
+              <circle id="gztip" cx="88" cy="38" r=".1" fill="none"/>
+            </svg></div>
+          <div class="gz-fig gz-8" id="gz8"><img src="${gc.eight}" alt="">
+            <svg class="gz-sign" viewBox="-4 -4 208 208" aria-hidden="true">
+              <defs><clipPath id="gztop"><rect width="200" height="101"/></clipPath><clipPath id="gzbot"><rect y="101" width="200" height="99"/></clipPath></defs>
+              <circle cx="100" cy="100" r="99" fill="#fff" stroke="#111" stroke-width="4"/>
+              <circle cx="100" cy="100" r="84" fill="none" stroke="#d33a3a" stroke-width="7"/>
+              ${["top", "bot"].map((h) => `<g id="gz${h}"><text clip-path="url(#gz${h})" x="100" y="104" text-anchor="middle" dominant-baseline="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="118" fill="#d33a3a">8</text></g>`).join("")}
+              <circle id="gzmouth" cx="100" cy="101" r=".1" fill="none"/>
+            </svg></div>
         </div><b>${c.title}</b><small>${c.text}</small>
         <button class="btn" data-i="${i}">下載卡片</button></li>`;
     }
@@ -779,6 +860,7 @@ function renderDownload() {
     b.onclick = () => downloadCard(CARDS[+b.dataset.i]);
   });
   if (document.getElementById("dlfront")) paintCardFront(document.getElementById("dlfront"));
+  if (document.getElementById("gzcard")) playGyozaCard(document.getElementById("gzcard"));
   const peachEl = document.getElementById("cardpeach");
   if (peachEl) {
     loadThree().then(() => {

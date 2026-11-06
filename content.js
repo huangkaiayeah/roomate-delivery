@@ -5,7 +5,7 @@ const CONFIG = {
   city: "日本橫濱",
   parts: ["0719", "2829", "1106"], // tracking number pieces, in the same order as TASKS
   unlockAt: "2026-11-06T00:00:00+09:00", // midnight Japan time
-  version: "1.5.2", // shown in the footer; raise it with each upload
+  version: "1.7.4", // shown in the footer; raise it with each upload
 };
 
 // Search page wording
@@ -198,7 +198,7 @@ const OFFICES = {
   dorm: {
     title: "宿舍郵局",
     en: "Dorm Post Office",
-    hero: "", // e.g. "assets/dorm.jpg"
+    hero: "assets/dorm-hero.jpg",
     caption: "噹~噹~噹~噹~~每天配著北大高中的鐘聲起床，又是美好的一天。",
     branches: ["北大愛悅支局", "客廳支局", "廚房支局"],
     news: [
@@ -323,9 +323,14 @@ const UK_EVIDENCE = {
   caption: "證物：外國月亮沒有比較圓，常懷臺灣初心不改，與之共勉。",
 };
 
-// eight 來eight 棒 card: 8 煎餃 gather around the 8 head. Positions are % of the picture.
+// eight 來eight 棒 card: character A throws 8 煎餃 and the 8 sign eats them; each one eaten joins a ring around its head.
+// ring: % of the picture (r is % of the width). bg / a / eight: the background and the two drawn characters as layers.
 const GYOZA_CARD = {
-  ring: { x: 58.3, y: 46.2, r: 17 }, // r is % of the width
+  ring: { x: 64.9, y: 61.5, r: 23.0 }, // r is % of the width
+  tall: 1.3333, // picture height / width
+  bg: "assets/gyoza-bg.jpg",
+  a: "assets/gyoza-a.png",
+  eight: "assets/gyoza-8.png",
 };
 
 // 中超style 三牲 card: two lines appear on the 普渡 scene, then the six products pop in. [picture, left %, top %, width %]

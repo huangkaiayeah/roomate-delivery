@@ -79,14 +79,23 @@ form button, .btn { display: block; width: 100%; margin-top: 10px; padding: 10px
 .peach-cap i { font-style: normal; }
 @keyframes cap-grow { from { transform: translateY(-50%) scale(.42); } }
 .card-stage { margin: 0 0 8px; }
-.gz-card { overflow: hidden; }
+.gz-card { position: relative; overflow: hidden; margin: 0 0 8px; }
+.gz-card > img { display: block; width: 100%; }
+.gz-fig { position: absolute; transform-origin: 50% 100%; }
+.gz-fig > img { display: block; width: 100%; }
+.gz-a { left: 2.35%; top: 52.7%; width: 31.5%; }
+.gz-8 { left: 46.4%; top: 47.6%; width: 35.3%; }
+.gz-sign { position: absolute; left: 2.08%; top: 1.76%; width: 96.3%; overflow: visible; }
+.gz-chop { position: absolute; left: -2%; top: -4%; width: 95%; transform-origin: 6% 18%; }
+.gz-fly, .gz-ring { position: absolute; width: 12.5%; translate: -50% -50%; pointer-events: none; }
+.gz-fly svg, .gz-ring svg { display: block; width: 100%; }
+.gz-card .gz-ring { width: 14%; animation: gz-ring-in .5s ease-out both; }
+@keyframes gz-ring-in { 0% { opacity: 0; scale: .2; } 60% { opacity: 1; scale: 1.25; } 100% { opacity: 1; scale: 1; } }
 .ss-card { position: relative; overflow: hidden; margin: 0 0 8px; container-type: inline-size; }
 .ss-card > img:first-child { display: block; width: 100%; }
 .ss-line { position: absolute; left: 3%; padding: .4cqw 1.6cqw; font-size: 4.6cqw; line-height: 1.35; white-space: nowrap; color: #fff; background: #111; animation: ss-line 8s infinite backwards; }
 .ss-item { position: absolute; display: block; box-shadow: 0 1px 4px rgba(0, 0, 0, .35); animation: gz-pop 8s ease-out infinite backwards; }
 @keyframes ss-line { 0% { opacity: 0; } 3%, 34% { opacity: 1; } 38%, 100% { opacity: 0; } }
-.gz-card .fry-slot.gz-dumpling { position: absolute; width: 13%; height: auto; padding: 0; background: none; border-radius: 0; box-shadow: none; transform: translate(-50%, -50%); animation: gz-pop 7s ease-out infinite backwards; }
-.gz-card .gz-dumpling svg { width: 100%; }
 @keyframes gz-pop { 0% { opacity: 0; scale: .2; } 4% { opacity: 1; scale: 1.25; } 7% { scale: 1; } 80% { opacity: 1; scale: 1; } 88%, 100% { opacity: 0; scale: 1; } }
 .card-fallback { display: grid; place-items: center; min-height: 160px; font-size: 64px; }
 .stage3d { container-type: inline-size; position: relative; max-width: 420px; margin: 8px auto; overflow: hidden; border: 1px solid var(--line); min-height: 200px; }
@@ -431,5 +440,5 @@ h1 { font-size: 34px; margin: 8px 0 16px; }
 footer { padding: 12px 84px 12px 16px; text-align: center; font-size: 12px; color: var(--muted); background: var(--panel); }
 .confetti { position: fixed; top: -12px; width: 9px; height: 14px; animation: fall 3.5s linear forwards; pointer-events: none; }
 @keyframes fall { to { transform: translateY(105vh) rotate(540deg); opacity: .6; } }
-@media (prefers-reduced-motion: reduce) { .confetti { display: none; } .stamp { animation: none; } .ladder polyline.run { animation-duration: .01s; } .fry-chef.cook, .ss-line, .ss-item, .gz-card .gz-dumpling, .push, .push.leaving, .q-bar, .app-stamp, .office-news li.flash, .meme-bubble, .meme-end-pic, .card3d, .stage3d .peach-cap { animation: none; } .push.leaving { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .confetti { display: none; } .stamp { animation: none; } .ladder polyline.run { animation-duration: .01s; } .fry-chef.cook, .ss-line, .ss-item, .gz-ring, .push, .push.leaving, .q-bar, .app-stamp, .office-news li.flash, .meme-bubble, .meme-end-pic, .card3d, .stage3d .peach-cap { animation: none; } .push.leaving { opacity: 0; } }
 .pcard small:empty { display: none; }
