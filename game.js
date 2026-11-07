@@ -987,15 +987,13 @@ async function sanshengSource(width = 540) {
 }
 
 // 線上客服卡: replays her chat with the 廢話客服 up to the 提示 she asked for, then the seal.
+// The greeting and her latest lines, so the card grows as she keeps chatting. Lines come in pairs: hers, then the reply.
 function chatLog() {
-  const isAsk = (m) => m.me && CHAT.hintWords.some((w) => norm(m.text).includes(norm(w)));
-  const log = [{ text: CHAT.greeting }, ...S.chat], ask = log.findIndex(isAsk);
-  if (ask < 0) {                                            // no hint in the saved chat, e.g. a loaded progress file
+  if (!S.chat.length) {                                     // nothing saved, e.g. a loaded progress file
     const hint = !openTasks().length ? CHAT.allDone : S.current ? CHAT.taskHints[S.current] : CHAT.noTask;
-    return [log[0], { me: true, text: CHAT.chips[0] }, { text: hint }];
+    return [{ text: CHAT.greeting }, { me: true, text: CHAT.chips[0] }, { text: hint }];
   }
-  const upto = log.slice(0, ask + 2);
-  return upto.length > 9 ? [log[0], ...upto.slice(-8)] : upto; // the greeting, then the last few lines before the hint
+  return [{ text: CHAT.greeting }, ...S.chat.slice(-10)];
 }
 
 async function chatSource(width = 540) {
@@ -1017,8 +1015,10 @@ async function chatSource(width = 540) {
     }
     return lines;
   });
+  // First the 客服 is connected, as on the 行動郵局 page; it stays as a line at the top.
+  const CONNECT = 1700, sysH = lh + 0.6 * bp;
   // Lay out every bubble, then give each one its moment: the 客服 types for a moment before each reply.
-  let y = 0, t = 400;
+  let y = sysH + gap, t = CONNECT;
   const items = chatLog().map((m) => {
     const lines = wrap(m.text.replace("[?]", "❔")), bw = Math.max(...lines.map((l) => g.measureText(l).width)) + 2 * bp, bh = lines.length * lh + 2 * bp;
     const item = { me: !!m.me, lines, bw, bh, y };
@@ -1057,6 +1057,11 @@ async function chatSource(width = 540) {
     const scroll = scrollAt(time);
     g.save();
     g.beginPath(); g.rect(0, head, W, H - head); g.clip();
+    const sys = time < CONNECT ? CHAT.connecting + "．".repeat(Math.floor(Math.max(0, time) / 350) % 4) : CHAT.connected;
+    g.font = font(400, fs * 0.82); g.textAlign = "center"; g.textBaseline = "middle";
+    const sw = g.measureText(CHAT.connecting + "．．．").width + 0.06 * W, sy = head + pad - scroll;
+    g.fillStyle = "#e9e9e9"; g.beginPath(); g.roundRect(W / 2 - sw / 2, sy, sw, sysH, sysH / 2); g.fill();
+    g.fillStyle = "#707070"; g.fillText(sys, W / 2, sy + sysH / 2);
     items.forEach((it) => {
       const top = head + pad + it.y - scroll;
       if (!it.me && time >= it.typing) drawFace(pad + av / 2, top + av / 2, av); // its face beside each of its lines
@@ -1493,21 +1498,24 @@ function senderOnline() {
   return senderHour() >= from && senderHour() < to;
 }
 
-function chatPanel() {
-  const log = [{ text: CHAT.greeting }, ...S.chat];
+const chatBubble = (m) => `<p class="${m.me ? "me" : "them"}">${esc(m.text).replace("[?]", `<button type="button" class="clue-q chat-q" data-chatq aria-label="我要提示">?</button>`)}</p>`;
+// waiting: the 客服 is still being connected, then types its greeting (see renderMobile).
+function chatPanel(waiting) {
+  const log = waiting ? `<p class="sys" id="chatsys">${CHAT.connecting}<i class="dots"></i></p>` : [{ text: CHAT.greeting }, ...S.chat].map(chatBubble).join("");
   return `
     <div class="chat">
       <div class="chathead">${CHAT.name}</div>
-      <div class="log" id="log" role="log">${log.map((m) => `<p class="${m.me ? "me" : "them"}">${esc(m.text).replace("[?]", `<button type="button" class="clue-q chat-q" data-chatq aria-label="我要提示">?</button>`)}</p>`).join("")}</div>
+      <div class="log" id="log" role="log">${log}</div>
       <div class="chips">${CHAT.chips.map((c) => `<button type="button">${c}</button>`).join("")}</div>
       <form id="say"><label for="msg">訊息</label><input id="msg" autocomplete="off"><button>傳送</button></form>
     </div>`;
 }
 
-function queuePanel() {
+// moving: her first visit, where the queue moves up instead of being paused (see renderMobile).
+function queuePanel(moving = false) {
   const [from, to] = CHAT.onlineHours;
   const waited = ((senderHour() - to + 24) % 24) / (24 - (to - from));
-  const pct = Math.round(Math.min(Math.max(waited, 0.1), 0.95) * 100);
+  const pct = moving ? 30 : Math.round(Math.min(Math.max(waited, 0.1), 0.95) * 100);
   const hhmm = (h) => `${String(h).padStart(2, "0")}:00`;
   return `
     <div class="queue">
@@ -1517,9 +1525,9 @@ function queuePanel() {
         <h3>當前您正在排隊等候中</h3>
         <p class="q-why">您正在 ${CHAT.name} 排隊等候。當輪到您時，您有 10 分鐘進入對話，若超過時效未進入須重新排隊取號。</p>
         <details><summary>這是什麼？</summary><p>${CHAT.name}下班了。服務時間為每天 ${hhmm(from)}–${hhmm(to)}（台灣時間）。</p></details>
-        <div class="q-track"><div class="q-pill"><div class="q-bar" style="width:${pct}%"><i class="q-person"></i></div></div></div>
+        <div class="q-track"><div class="q-pill"><div class="q-bar" id="qbar" style="width:${pct}%"><i class="q-person"></i></div></div></div>
         <div class="q-status">
-          <p>隊列已暫停</p>
+          <p id="qstate">${moving ? `${CHAT.queueMoving}<br><b id="qahead">${CHAT.queueAhead.replace("{n}", 3)}</b>` : "隊列已暫停"}</p>
           <p class="q-time"><i class="q-dot"></i>最近更新狀態：<span id="qclock">${new Date().toLocaleTimeString("zh-TW")}</span></p>
         </div>
         <p class="q-id"><b>隊列 ID：</b>${S.queueId}</p>
@@ -1527,20 +1535,42 @@ function queuePanel() {
     </div>`;
 }
 
-function renderMobile() {
+// afterQueue: her first visit's queue has just reached her, so the chat opens whatever the hour,
+// and stays open until the page is reloaded (putThrough), even if she's outside the 客服's hours.
+let putThrough = false;
+function renderMobile(afterQueue = false) {
   clearInterval(timer);
-  const online = senderOnline();
+  if (afterQueue) putThrough = true;
+  const first = !S.chatSeen && !afterQueue;
+  const online = putThrough || (!first && senderOnline());
+  // Just put through, or a chat with no history yet: the 客服 is connected first, then types its greeting.
+  const waiting = online && (afterQueue || !S.chat.length);
   shell("支線任務", "行動郵局", `
-    ${online ? chatPanel() : queuePanel()}
+    ${online ? chatPanel(waiting) : queuePanel(first)}
     <h3 class="group">儲存進度</h3>
     <p class="small">把目前進度存成一個檔案。手機上可從分享選單選擇 Google 雲端硬碟；換裝置時再讀取這個檔案。</p>
     <button class="btn" id="saveit">儲存進度檔</button>
     <label class="btn alt upload">讀取進度檔<input id="loadit" type="file" accept=".txt,text/plain" hidden></label>
     <p class="err" id="err" role="alert"></p>
     <button class="reset" id="reset">清除紀錄，從頭開始</button>`);
+  if (first) {
+    // The queue moves up one by one, then she's put through to the 客服.
+    const bar = document.getElementById("qbar");
+    [3, 2, 1, 0].forEach((n, i) => setTimeout(() => {
+      if (!bar.isConnected) return;
+      bar.style.width = `${30 + (70 * i) / 3}%`;
+      document.getElementById("qstate").innerHTML = n ? `${CHAT.queueMoving}<br><b>${CHAT.queueAhead.replace("{n}", n)}</b>` : `<b>${CHAT.queueTurn}</b>`;
+      if (!n) setTimeout(() => {
+        if (!bar.isConnected) return;
+        S.chatSeen = true;
+        save();
+        renderMobile(true);
+      }, 1100);
+    }, 400 + i * 1300));
+  }
   // The queue opens by itself when the online hours start, as the notice promises.
   timer = setInterval(() => {
-    if (senderOnline() !== online) return render();
+    if (!first && !putThrough && senderOnline() !== online) return render();
     const clock = document.getElementById("qclock");
     if (clock) clock.textContent = new Date().toLocaleTimeString("zh-TW");
   }, 30000);
@@ -1557,7 +1587,20 @@ function renderMobile() {
     app.querySelectorAll(".chips button").forEach((b) => {
       b.onclick = () => send(b.textContent);
     });
-    app.querySelector("[data-chatq]").onclick = () => send(CHAT.chips[0]);
+    logEl.onclick = (e) => {
+      if (e.target.closest("[data-chatq]")) send(CHAT.chips[0]);
+    };
+    if (waiting) {
+      setTimeout(() => {
+        if (!logEl.isConnected) return;
+        document.getElementById("chatsys").textContent = CHAT.connected;
+        logEl.insertAdjacentHTML("beforeend", `<p class="them typing" aria-label="輸入中"><i></i><i></i><i></i></p>`);
+        setTimeout(() => {
+          if (!logEl.isConnected) return;
+          logEl.querySelector(".typing").outerHTML = chatBubble({ text: CHAT.greeting });
+        }, 900);
+      }, 1600);
+    }
     document.getElementById("say").onsubmit = (e) => {
       e.preventDefault();
       send(document.getElementById("msg").value);
@@ -1578,6 +1621,8 @@ function renderMobile() {
   document.getElementById("reset").onclick = restart;
 }
 
+// RPG questions fold like the other FAQ entries. One she unfolds, or the game takes her to, stays open across redraws.
+const cardQOpen = new Set();
 function cardQuestion(id) {
   const c = S.card, q = STUDENT_CARD.questions[id];
   if (!c.open.includes(id)) return "";
@@ -1609,15 +1654,16 @@ function cardQuestion(id) {
       <button>送出申請</button>
     </form>`;
   return `
-    <div class="card-q" id="cq-${id}">
-      <div class="q-row"><b>${q.text}</b>${ans ? "" : clueButton(`ch-${id}`, shown >= STUDENT_CARD.hints.length)}</div>
+    <details class="card-q" id="cq-${id}" data-cq="${id}" ${cardQOpen.has(id) ? "open" : ""}>
+      <summary>${q.text}</summary>
+      ${ans ? "" : `<div class="q-row q-tools">${clueButton(`ch-${id}`, shown >= STUDENT_CARD.hints.length)}</div>`}
       ${ans ? `<p class="small">你的回答：${ans === "yes" ? "是" : "否"}</p>` : `
         <div class="yn"><button data-yn="yes" data-q="${id}">是</button><button data-yn="no" data-q="${id}">否</button></div>
         ${clueList(`ch-${id}`, STUDENT_CARD.hints, shown)}`}
       ${ans && !right ? `<p class="err">${STUDENT_CARD.wrong}</p>` : ""}
       ${ans && !right && !q.next ? `<p>${STUDENT_CARD.failed}</p><button class="btn alt" id="cardrestart">${STUDENT_CARD.restart}</button>` : ""}
       ${right && !c.won ? form : ""}
-    </div>`;
+    </details>`;
 }
 
 // Where each answer goes on the scanned form, in % of the image.
@@ -1769,8 +1815,8 @@ function memeSteps() {
     if (ans !== q.answer) steps.push({ who: "right", clip: "what", text: m.wrong[n], cards: [], ms: 1700 });
     else if (after) steps.push({ who: "right", clip: "what", text: after, cards: [], ms: 1700 });
   });
-  // She only reaches this sequence by getting the last question right.
-  steps.push({ who: "right", text: m.praise[answered.length - 1], cards: [] });
+  // She only reaches this sequence by getting the last question right. After 叫你不記名 the cats have said enough.
+  if (answered[answered.length - 1] !== "unnamed") steps.push({ who: "right", text: m.praise[answered.length - 1], cards: [] });
   return steps;
 }
 const memeStepMs = (step) => step.ms || Math.min(4200, 1400 + step.text.length * 110);
@@ -2244,6 +2290,7 @@ function renderOffice(key) {
   });
   const found = document.getElementById("found");
   const showQuestion = (id) => {
+    cardQOpen.add(id);
     renderOffice(key);
     document.getElementById(`cq-${id}`).scrollIntoView({ behavior: "smooth", block: "center" });
   };
@@ -2261,6 +2308,9 @@ function renderOffice(key) {
       };
     });
   };
+  app.querySelectorAll("[data-cq]").forEach((d) => {
+    d.ontoggle = () => (d.open ? cardQOpen.add(d.dataset.cq) : cardQOpen.delete(d.dataset.cq));
+  });
   Object.keys(STUDENT_CARD.questions).forEach((id) => {
     if (!document.getElementById(`cq-${id}`) || S.card.answers[id]) return;
     mountClue(`ch-${id}`, STUDENT_CARD.hints, S.card.hints[id] || 0, (shown) => {
@@ -2394,7 +2444,11 @@ function renderTrack() {
       <li><a href="#download"><b>下載專區</b><span>已解鎖 ${cards} / ${CARDS.length} 張卡片</span></a></li>
     </ul>
     <h3 class="group">郵件處理紀錄</h3>
-    <ol class="timeline">${TRACKING.map(([date, office, status]) => `<li><span>${date}・${office}</span>${typeof status === "string" ? status : S.card.won && S.dormNamed ? status.all : status.some}</li>`).join("")}</ol>
+    <ol class="timeline">${TRACKING.map(([date, office, status, note]) => {
+      const n = typeof note === "string" ? note : S.card.won && S.dormNamed ? note.all : note.some;
+      const [who, text] = n.includes("：") ? [n.slice(0, n.indexOf("：")), n.slice(n.indexOf("：") + 1)] : ["", n];
+      return `<li><span>${date}・${office}</span><b>${status}</b>${n ? `<p class="note">${who ? `<em>${who}</em>` : ""}${text}</p>` : ""}</li>`;
+    }).join("")}</ol>
     <a class="btn" href="#card">開啟包裹</a>`);
 }
 
@@ -2406,6 +2460,11 @@ function renderCard() {
       <div class="stamp">配達完了</div>
       <h1>生日快樂</h1>
       <div class="letter">${ENDING.letter.map((l) => `<p>${l.replace(/\n/g, "<br>")}</p>`).join("")}</div>
+      <details class="edits">
+        <summary>${ENDING.edited}・<u>${ENDING.editLabel}</u></summary>
+        <h3>${ENDING.editsTitle}</h3>
+        <ol>${[{ at: `${ENDING.edited}（${ENDING.editsNow}）`, text: ENDING.letter[1] }, ...ENDING.edits].map((v) => `<li><time>${v.at}</time><p>${v.text.replace(/\n/g, "<br>")}</p></li>`).join("")}</ol>
+      </details>
       ${photos ? `<div class="photos">${photos}</div>` : ""}
     </section>`);
   for (let i = 0; i < 60; i++) {

@@ -205,6 +205,27 @@ form button, .btn { display: block; width: 100%; margin-top: 10px; padding: 10px
 .log { height: 280px; overflow-y: auto; padding: 12px; background: #f7f7f7; }
 .log p { white-space: pre-line; width: fit-content; max-width: 80%; margin: 0 0 8px; padding: 6px 10px; border-radius: 8px; background: #fff; border: 1px solid var(--line); overflow-wrap: anywhere; }
 .log .me { margin-left: auto; background: #dff3df; border-color: #b8dfb8; }
+/* Connecting to the 客服, then its typing dots before the greeting */
+.log .sys { margin: 0 auto 10px; padding: 2px 14px; font-size: 13px; color: var(--muted); background: #e9e9e9; border: 0; border-radius: 99px; }
+.log .dots::after { content: ""; animation: chat-dots 1.4s steps(1) infinite; }
+@keyframes chat-dots { 25% { content: "．"; } 50% { content: "．．"; } 75%, 100% { content: "．．．"; } }
+.log .typing { display: flex; gap: 4px; padding: 10px 12px; }
+.log .typing i { width: 7px; height: 7px; border-radius: 50%; background: #9a9a9a; animation: chat-bob 1s ease-in-out infinite; }
+.log .typing i:nth-child(2) { animation-delay: .15s; }
+.log .typing i:nth-child(3) { animation-delay: .3s; }
+@keyframes chat-bob { 0%, 60%, 100% { translate: 0 0; } 30% { translate: 0 -4px; } }
+/* The letter's edit history, like an edited post */
+.edits { margin-top: 6px; text-align: right; font-size: 13px; color: var(--muted); }
+.edits summary { display: inline; cursor: pointer; list-style: none; }
+.edits summary::after { content: " ▸"; }
+.edits[open] summary::after { content: " ▾"; }
+.edits summary::-webkit-details-marker { display: none; }
+.edits[open] { text-align: left; }
+.edits h3 { margin: 12px 0 6px; font-size: 15px; color: var(--ink); }
+.edits ol { list-style: none; margin: 0; padding: 0; }
+.edits li { padding: 10px 12px; margin-bottom: 8px; background: #fffdf6; border: 1px solid var(--line); }
+.edits time { display: block; margin-bottom: 4px; font-size: 12px; color: #2277aa; font-variant-numeric: tabular-nums; }
+.edits li p { margin: 0; font-size: 14px; color: var(--ink); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px 0; }
 .chips button { padding: 4px 10px; font: inherit; font-size: 13px; color: var(--green-dark); background: #fff; border: 1px solid var(--green); border-radius: 14px; cursor: pointer; }
 .chat form { margin: 0; border: 0; background: none; padding: 8px 10px 10px; }
@@ -241,13 +262,14 @@ form button, .btn { display: block; width: 100%; margin-top: 10px; padding: 10px
 .q-card details p { margin: 6px 0 0; font-size: 14px; }
 .q-track { margin-top: 16px; padding: 12px; background: #e8f3ea; border-radius: 6px; }
 .q-pill { overflow: hidden; background: #fff; border: 3px solid var(--green); border-radius: 16px; }
-.q-bar { position: relative; height: 26px; min-width: 40px; background: repeating-linear-gradient(-45deg, #2e8b45 0 14px, #6db483 14px 28px); background-size: 200% 100%; animation: q-move 2s linear infinite; }
+.q-bar { position: relative; height: 26px; min-width: 40px; transition: width 1s ease-in-out; background: repeating-linear-gradient(-45deg, #2e8b45 0 14px, #6db483 14px 28px); background-size: 200% 100%; animation: q-move 2s linear infinite; }
 .q-person { position: absolute; right: 8px; top: 3px; width: 10px; height: 20px; background: #fff; border-radius: 5px 5px 2px 2px; }
 .q-person::before { content: ""; position: absolute; left: 1px; top: -1px; width: 8px; height: 8px; background: #fff; border-radius: 50%; box-shadow: 0 0 0 1px #2e8b45; }
 @keyframes q-move { to { background-position: 40px 0; } }
 .q-status { margin-top: 12px; padding: 20px 12px; text-align: center; background: #e8f3ea; border-radius: 6px; }
 .q-status p { margin: 0; }
 .q-status p:first-child { font-size: 18px; margin-bottom: 12px; }
+.q-status p:first-child b { color: var(--green-dark); }
 .q-time { font-size: 14px; color: #555d66; }
 .q-dot { display: inline-block; width: 14px; height: 14px; margin-right: 8px; vertical-align: -2px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #e6ee9c, #8a9a1c); }
 .q-id { margin: 16px 0 0; font-size: 13px; text-align: center; color: #555d66; overflow-wrap: anywhere; }
@@ -276,7 +298,9 @@ form .clue-q, .clue-q { flex: none; width: 28px; height: 28px; margin: 0; paddin
 .match-icon.on { border-color: var(--red); box-shadow: 0 0 0 2px var(--red); }
 .bag-icons { font-size: 22px; letter-spacing: 2px; }
 
-.card-q { padding: 10px 0; border-bottom: 1px dotted #bbb; }
+.card-q { padding: 7px 0; border-bottom: 1px dotted #bbb; }
+.card-q[open] > summary { margin-bottom: 8px; font-weight: 700; }
+.q-tools { justify-content: flex-end; margin-bottom: 4px; }
 .card-q .small { margin: 4px 0 0; }
 .card-q .err { margin: 4px 0 0; }
 .yn { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 6px; }
@@ -429,6 +453,10 @@ form .clue-q, .clue-q { flex: none; width: 28px; height: 28px; margin: 0; paddin
 .timeline li { padding: 8px 12px; border-bottom: 1px solid var(--line); }
 .timeline li:last-child { border: 0; font-weight: 700; color: var(--green); background: #eef8ee; }
 .timeline span { display: block; font-size: 13px; color: var(--muted); }
+.timeline b { display: block; font-weight: 700; }
+/* 備註: on its own line under each stop, like a note pinned to the record */
+.timeline .note { margin: 6px 0 2px; padding: 6px 10px; font-size: 14px; font-weight: 400; line-height: 1.5; color: var(--ink); background: #f3f3f3; border-left: 3px solid #bdbdbd; border-radius: 0 4px 4px 0; }
+.timeline .note em { display: block; font-size: 12px; font-style: normal; font-weight: 700; color: var(--muted); }
 
 .ending { text-align: center; }
 .stamp { display: inline-block; margin: 12px 0; padding: 6px 18px; font-size: 32px; font-weight: 900; letter-spacing: 4px; color: var(--red); border: 5px double var(--red); border-radius: 8px; transform: rotate(-6deg); animation: stamp .5s ease-out; }

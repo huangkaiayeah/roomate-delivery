@@ -5,7 +5,7 @@ const CONFIG = {
   city: "日本橫濱",
   parts: ["0719", "2829", "1106"], // tracking number pieces, in the same order as TASKS
   unlockAt: "2026-11-06T00:00:00+09:00", // midnight Japan time
-  version: "1.14.0", // shown in the footer; raise it with each upload
+  version: "1.18.2", // shown in the footer; raise it with each upload
 };
 
 // Search page wording
@@ -366,6 +366,12 @@ const CARDS = [
 // Mobile post: the hint robot. Scripted replies only, so it works with no server.
 const CHAT = {
   name: "廢話客服",
+  connecting: "正在為您轉接客服", // shown with moving dots on her first visit, or while the chat has no history
+  connected: "已為您接通廢話客服",
+  // Her first visit to 行動郵局, at any hour: the queue moves up until it's her turn, then she's put through.
+  queueMoving: "排隊中，請稍候",
+  queueAhead: "前方還有 {n} 位",
+  queueTurn: "輪到您了！",
   avatar: "assets/chat-avatar.png", // the bearded face beside its replies on the 線上客服卡
   sound: "聲音", // the 🔊 / 🔇 button for the card's message sounds
   onlineHours: [8, 24], // Taiwan time, 24-hour clock. Outside these hours the page shows the queue instead. Use [0, 24] for always on.
@@ -397,28 +403,35 @@ const NOTICES = [
   ["【宿舍通知】", "本局查獲當年的音量紀錄，請於期限內說明。"],
 ];
 
-// Shown when the correct tracking number is entered.
-// The 北大郵局 row has two versions: everything there done, or only items collected.
+// Shown when the correct tracking number is entered: [date, office, status, 備註 (shown on its own line; "" for none)].
+// The 北大郵局 備註 has two versions: everything there done, or only items collected.
 const TRACKING = [
-  ["11/03", "高雄郵局", "收寄。寄件人備註：此為特急件，務必於11/06前送抵，煩請各局密切留意"],
-  ["11/03", "北大郵局", {
-    all: `抵達三峽分檢中心。北大郵局備註：特此感謝校友${CONFIG.recipient}蒞臨本局，協助完善缺失紀錄。`,
-    some: `抵達三峽分檢中心。北大郵局備註：特邀校友${CONFIG.recipient}至本局，參與新宿舍落成典禮。`,
+  ["11/03", "高雄郵局", "收寄。", "寄件人備註：此為特急件，務必於日本時間11/06前送抵，煩請各局密切留意。寄件人有前科，請小心輕放。"],
+  ["11/03", "北大郵局", "抵達三峽分檢中心。", {
+    all: `北大郵局備註：特此感謝校友${CONFIG.recipient}蒞臨本局，協助完善缺失紀錄。`,
+    some: `北大郵局備註：特邀校友${CONFIG.recipient}至本局，參與新宿舍落成典禮。`,
   }],
-  ["11/04", "宿舍郵局", "由北大愛悅轉往會計事務所。宿舍郵局備註：經查無相關學籍紀錄，音量紀錄"],
-  ["11/04", "會計事務所", "由會計事務所送至桃園機場海關。會計事務所備註：經查無相關學籍紀錄，音量紀錄"],
-  ["11/05", "桃園機場海關", "暫扣。桃園機場海關備註：疑含禁運之肉類製品。"],
-  ["11/05", "桃園機場海關", "放行，包裹運送航班為 CI 1106。桃園機場海關備註：經核查為非生鮮與肉類組合之三牲，現已放行。"],
-  ["11/05", "日本税関", "放行。日本税関備註：重量未知，敬祝收件人生日快快樂。"],
-  ["11/06", `${CONFIG.city}`, "配達完了。"],
+  ["11/04", "宿舍郵局", "由北大愛悅轉往會計事務所。", "宿舍郵局備註：經查無相關學籍紀錄，惟查獲生日應援紀錄一份，已隨件附上，請收件人於期限內說明。"],
+  ["11/04", "會計事務所", "由會計事務所送至桃園機場海關。", "會計事務所備註：誤列為報稅期間客戶急件，已由收件人拆封查驗：內容物為壽桃塔，非發票憑證。"],
+  ["11/05", "桃園機場海關", "暫扣。", "桃園機場海關備註：疑含禁運之肉類製品：雞、豬、魚各二。"],
+  ["11/05", "桃園機場海關", "放行，包裹運送航班為 CI 1106。", "桃園機場海關備註：經查核為非生鮮三牲，合乎「人有洋節helloween，吾等普渡平安double win」，現已放行。"],
+  ["11/05", "日本税関", "放行。", "日本税関備註：內容物重量 0 公克，無從課稅。敬祝收件人生日快樂🎂"],
+  ["11/06", `${CONFIG.city}`, "配達完了。", `${CONFIG.city}備註：收件人已簽收。寄件人轉知：下次高機率再犯。`],
 ];
 
 const ENDING = {
-  // Replace with your own words. This is a draft of the gift itself.
+  // The letter on the 生日卡片 page. Shown as edited: the time below it opens the earlier versions.
   letter: [
     "阿如：",
-    "可惡！！太高估自己\n還有動畫+結尾在產製中🫠\n請稍後 等我完善體驗\n趕在日本時間11/6結束前祝妳生日快樂啦啦啦啦❤️", // temporary, full letter coming
+    "嘿嘿嘿嘿嘿大致完成了~~~\n各個區塊都可以點來點去亂玩一通了\n不過還有個大動畫完善中🤣\n20代的尾巴 剛好碰上選舉\n造勢就是要熱熱鬧鬧+持續擾民 才對味(?)\n(說了一些對臺灣未來充滿信心的話)\n(感覺臺灣南波萬 臺灣讚讚讚)\n以上 20代快樂🎉",
     "KU，高雄",
   ],
+  edited: "115/11/07 11:06",
+  edits: [
+    { at: "115/11/06 23:58", text: "可惡！！太高估自己\n還有動畫+結尾在產製中🫠\n請稍後 等我完善體驗\n趕在日本時間11/6結束前祝妳生日快樂啦啦啦啦❤️" },
+  ], // older versions of the middle part, newest first
+  editLabel: "已編輯",
+  editsTitle: "編輯紀錄",
+  editsNow: "目前版本",
   photos: [], // e.g. ["assets/dorm.jpg", "assets/peach-tower.jpg"]
 };
