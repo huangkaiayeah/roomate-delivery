@@ -5,7 +5,7 @@ const CONFIG = {
   city: "日本橫濱",
   parts: ["0719", "2829", "1106"], // tracking number pieces, in the same order as TASKS
   unlockAt: "2026-11-06T00:00:00+09:00", // midnight Japan time
-  version: "1.19.0", // shown in the footer; raise it with each upload
+  version: "1.19.1", // shown in the footer; raise it with each upload
 };
 
 // Search page wording
@@ -378,7 +378,7 @@ const CHAT = {
   greeting: "您好，我是室友郵政の廢話客服💁‍♀️。卡關時建議點選[?]，或是輸入「提示」。", // [?] becomes the clickable hint icon
   chips: ["我要提示", "你到底寄了什麼？", "今年還有惡作劇嗎？"],
   hintWords: ["提示", "卡關", "hint", "幫"],
-  noTask: "查無進行中的任務。請先到郵路爬梯抽籤。",
+  noTask: "查無進行中的任務。請先到爬梯子抽路線。",
   allDone: "所有任務皆已完成。請到查詢專區輸入完整追蹤號碼。",
   taskHints: {
     eat: "只要在規定時間內成功夾到+吃完8顆煎餃就算過關了喔！",

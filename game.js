@@ -197,12 +197,12 @@ const pickCard = (opt, side) => `<button data-side="${side}">
 function renderLadder() {
   const open = openTasks();
   if (!open.length) {
-    return shell("主線任務", "郵路爬梯抽籤", `<div class="got"><p>所有郵路都走完了。到查詢專區輸入追蹤號碼吧。</p><a class="btn" href="#">回查詢專區</a></div>`);
+    return shell("主線任務", "爬梯子抽路線", `<div class="got"><p>所有郵路都走完了。到查詢專區輸入追蹤號碼吧。</p><a class="btn" href="#">回查詢專區</a></div>`);
   }
   // The last task needs no draw.
   if (open.length === 1 && !S.current) drawTask(open[0]);
   if (S.current && S.landed === null) {
-    return shell("主線任務", "郵路爬梯抽籤", `
+    return shell("主線任務", "爬梯子抽路線", `
       <div class="got"><p>只剩最後一條郵路：</p><p class="part small-part">${TASKS[S.current].title}</p>
       <a class="btn" href="#${S.current}">開始任務</a></div>`);
   }
@@ -215,12 +215,12 @@ function renderLadder() {
   const rungs = S.rungs.map((g, r) => `<line x1="${colX(g)}" y1="${rowY(r)}" x2="${colX(g + 1)}" y2="${rowY(r)}"/>`).join("");
   const landed = S.landed !== null;
   const walked = landed ? tracePath(S.start).pts : [];
-  shell("主線任務", "郵路爬梯抽籤", `
+  shell("主線任務", "爬梯子抽路線", `
     ${landed ? "" : "<p>選一條郵路，看看會抽中哪項任務。</p>"}
     <div class="starts" style="grid-template-columns:repeat(${n},1fr)">
       ${open.map((_, c) => `<button data-c="${c}" ${landed ? "disabled" : ""}>${"甲乙丙"[c]}</button>`).join("")}
     </div>
-    <svg class="ladder" viewBox="0 0 ${LW} ${LH}" role="img" aria-label="爬梯抽籤圖">${cols}${rungs}
+    <svg class="ladder" viewBox="0 0 ${LW} ${LH}" role="img" aria-label="爬梯子抽路線圖">${cols}${rungs}
       <polyline class="walked" pathLength="1" points="${toPoints(walked)}"/><polyline id="trace" pathLength="1" points=""/></svg>
     <div class="starts ends" style="grid-template-columns:repeat(${n},1fr)">
       ${open.map((_, c) => `<span class="${S.landed === c ? "hit" : ""}">${S.landed === c ? "✉" : "？"}</span>`).join("")}
@@ -1149,7 +1149,7 @@ async function chatSource(width = 540) {
     }
   };
   const last = QUEUE + items[items.length - 1].at;
-  const sounds = [[Q_STEPS[3], "reply"], ...items.map((it) => [QUEUE + it.at, it.me ? "send" : "reply"]), [QUEUE + END + 230, "stamp"]];
+  const sounds = [...items.map((it) => [QUEUE + it.at, it.me ? "send" : "reply"]), [QUEUE + END + 230, "stamp"]];
   return { canvas, duration: QUEUE + END + 2800, segment: [last - 1100, last + 700], still: QUEUE + END + 1000, sounds, render };
 }
 
@@ -2488,7 +2488,7 @@ function renderOffice(key) {
 
 function renderSitemap() {
   const links = [
-    ["", "國際郵件追蹤查詢"], ["ladder", "郵路爬梯抽籤"], ["download", "下載專區"], ["mobile", "行動郵局"],
+    ["", "國際郵件追蹤查詢"], ["ladder", "爬梯子抽路線"], ["download", "下載專區"], ["mobile", "行動郵局"],
     ...Object.entries(OFFICES).map(([key, p]) => [key, p.title]),
   ];
   shell("網站導覽", "網站導覽", `<ul class="sitemap">${links.map(([h, t]) => `<li><a href="#${h}">${t}</a></li>`).join("")}</ul>`);
