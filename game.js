@@ -1052,7 +1052,7 @@ async function chatSource(width = 540) {
     it.lines.forEach((line, n) => g.fillText(line, bp, bp + lh * (n + 0.5)));
     g.restore();
   };
-  const render = (time) => {
+  const chatAt = (time) => {
     g.fillStyle = "#f7f7f7"; g.fillRect(0, 0, W, H);
     const scroll = scrollAt(time);
     g.save();
@@ -1086,9 +1086,71 @@ async function chatSource(width = 540) {
     g.fillText(CHAT.name, pad + head * 0.82, head / 2);
     drawPostStamp(g, 0, 0, W, H, (time - END - 200) / 400);
   };
-  const last = items[items.length - 1].at;
-  const sounds = [...items.map((it) => [it.at, it.me ? "send" : "reply"]), [END + 230, "stamp"]];
-  return { canvas, duration: END + 2800, segment: [last - 1100, last + 700], still: END + 1000, sounds, render };
+
+  // Before the chat: the queue she waited in on her first visit to 行動郵局, moving up until it's her turn.
+  const Q_STEPS = [400, 1700, 3000, 4300], QUEUE = 5400, FADE = 350;
+  const drawQueue = (time) => {
+    g.fillStyle = "#fff"; g.fillRect(0, 0, W, H);
+    g.fillStyle = "#038c00"; g.fillRect(0, 0, W, 0.012 * W);
+    g.textBaseline = "middle"; g.textAlign = "center";
+    const lr = 0.05 * W, ly = 0.1 * W;                         // the 室 logo and name
+    g.font = font(900, 0.06 * W);
+    const nw = g.measureText("室友郵政").width, lx = W / 2 - (nw + 2 * lr + 0.02 * W) / 2 + lr;
+    g.fillStyle = "#fff"; g.strokeStyle = "#1d4f9c"; g.lineWidth = lr * 0.2;
+    g.beginPath(); g.arc(lx, ly, lr - g.lineWidth / 2, 0, Math.PI * 2); g.fill(); g.stroke();
+    g.fillStyle = "#d0402b"; g.font = font(900, lr * 1.1); g.fillText("室", lx, ly + lr * 0.05);
+    g.fillStyle = "#038c00"; g.font = font(900, 0.06 * W); g.textAlign = "left"; g.fillText("室友郵政", lx + lr + 0.02 * W, ly);
+    g.fillStyle = "#555d66"; g.font = font(900, 0.06 * W); g.fillText("當前您正在排隊等候中", pad, 0.24 * W);
+    g.font = font(700, 0.032 * W);
+    ["您正在 廢話客服 排隊等候。當輪到您時，您有 10 分鐘", "進入對話，若超過時效未進入須重新排隊取號。"].forEach((l, n) => g.fillText(l, pad, 0.32 * W + n * 0.05 * W));
+    const step = Q_STEPS.filter((at) => time >= at).length - 1;   // 0..3: three ahead, two, one, her turn
+    const from = step <= 0 ? 0.3 : 0.3 + (0.7 * (step - 1)) / 3, to = 0.3 + (0.7 * Math.max(0, step)) / 3;
+    const share = from + (to - from) * easeInOut((time - (Q_STEPS[Math.max(0, step)] || 0)) / 1000);
+    const tx = pad, ty = 0.44 * W, tw = W - 2 * pad, th = 0.15 * W;   // the green track with the striped bar
+    g.fillStyle = "#e8f3ea"; g.beginPath(); g.roundRect(tx, ty, tw, th, 0.012 * W); g.fill();
+    const px = tx + 0.03 * W, ph = 0.075 * W, py = ty + (th - ph) / 2, pw = tw - 0.06 * W, bw = Math.max(ph, pw * share);
+    g.save(); g.beginPath(); g.roundRect(px, py, pw, ph, ph / 2); g.clip();
+    g.fillStyle = "#fff"; g.fillRect(px, py, pw, ph);
+    g.beginPath(); g.rect(px, py, bw, ph); g.clip();
+    const stripe = 0.035 * W, shift = ((time / 2000) * 2 * stripe) % (2 * stripe);
+    g.fillStyle = "#2e8b45"; g.fillRect(px, py, bw, ph); g.fillStyle = "#6db483";
+    for (let x = px - ph - 2 * stripe + shift; x < px + bw; x += 2 * stripe) { g.beginPath(); g.moveTo(x, py + ph); g.lineTo(x + stripe, py + ph); g.lineTo(x + stripe + ph, py); g.lineTo(x + ph, py); g.fill(); }
+    g.fillStyle = "#fff"; g.beginPath(); g.roundRect(px + bw - 0.03 * W, py + 0.012 * W, 0.016 * W, ph - 0.024 * W, 0.006 * W); g.fill();   // the little person
+    g.beginPath(); g.arc(px + bw - 0.022 * W, py + 0.014 * W, 0.009 * W, 0, Math.PI * 2); g.fill();
+    g.restore();
+    g.strokeStyle = "#038c00"; g.lineWidth = 0.008 * W; g.beginPath(); g.roundRect(px, py, pw, ph, ph / 2); g.stroke();
+    const sy = 0.63 * W, sh = 0.3 * W;                            // the status box
+    g.fillStyle = "#e8f3ea"; g.beginPath(); g.roundRect(tx, sy, tw, sh, 0.012 * W); g.fill();
+    g.textAlign = "center"; g.fillStyle = "#434343";
+    if (step < 3) {
+      g.font = font(400, 0.042 * W); g.fillText(CHAT.queueMoving, W / 2, sy + 0.07 * W);
+      g.fillStyle = "#026b00"; g.font = font(900, 0.045 * W); g.fillText(CHAT.queueAhead.replace("{n}", 3 - Math.max(0, step)), W / 2, sy + 0.14 * W);
+    } else {
+      g.fillStyle = "#026b00"; g.font = font(900, 0.05 * W); g.fillText(CHAT.queueTurn, W / 2, sy + 0.1 * W);
+    }
+    g.fillStyle = "#8a9a1c"; g.beginPath(); g.arc(W / 2 - 0.2 * W, sy + 0.23 * W, 0.013 * W, 0, Math.PI * 2); g.fill();
+    g.fillStyle = "#555d66"; g.font = font(400, 0.032 * W); g.textAlign = "left"; g.fillText("最近更新狀態：上午11:06:00", W / 2 - 0.175 * W, sy + 0.23 * W);
+    g.textAlign = "center"; g.font = font(400, 0.028 * W); g.fillText(`隊列 ID：${S.queueId}`, W / 2, sy + sh + 0.05 * W);
+    const ny = sy + sh + 0.1 * W, nh = 0.16 * W;                // the 公告 notice, as on the page
+    g.fillStyle = "#fff"; g.shadowColor = "rgba(0,0,0,.15)"; g.shadowBlur = 0.01 * W;
+    g.beginPath(); g.roundRect(tx, ny, tw, nh, 0.018 * W); g.fill(); g.shadowBlur = 0;
+    g.fillStyle = "#d32f2f"; g.fillRect(tx, ny, 0.01 * W, nh);
+    g.beginPath(); g.roundRect(tx + 0.03 * W, ny + 0.025 * W, 0.08 * W, 0.045 * W, 0.006 * W); g.fill();
+    g.fillStyle = "#fff"; g.font = font(700, 0.03 * W); g.fillText("公告", tx + 0.07 * W, ny + 0.048 * W);
+    g.textAlign = "left"; g.fillStyle = "#434343"; g.font = font(400, 0.03 * W);
+    ["客服下班期間進入之用戶，系統將依隨機取號方式", "分配號碼，並依號碼順序安排對話。請保持此頁面", "開啟，無須重新整理。"].forEach((l, n) => g.fillText(l, tx + 0.13 * W, ny + 0.048 * W + n * 0.045 * W));
+  };
+  // The whole card: the queue, a quick fade, then the chat as before.
+  const render = (time) => {
+    if (time < QUEUE) return drawQueue(time);
+    chatAt(time - QUEUE);
+    if (time < QUEUE + FADE) {
+      g.save(); g.globalAlpha = 1 - (time - QUEUE) / FADE; drawQueue(QUEUE); g.restore();
+    }
+  };
+  const last = QUEUE + items[items.length - 1].at;
+  const sounds = [[Q_STEPS[3], "reply"], ...items.map((it) => [QUEUE + it.at, it.me ? "send" : "reply"]), [QUEUE + END + 230, "stamp"]];
+  return { canvas, duration: QUEUE + END + 2800, segment: [last - 1100, last + 700], still: QUEUE + END + 1000, sounds, render };
 }
 
 // A card on the page is the same drawing as its downloads, sized for the screen.

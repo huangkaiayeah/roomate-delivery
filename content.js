@@ -5,7 +5,7 @@ const CONFIG = {
   city: "日本橫濱",
   parts: ["0719", "2829", "1106"], // tracking number pieces, in the same order as TASKS
   unlockAt: "2026-11-06T00:00:00+09:00", // midnight Japan time
-  version: "1.18.2", // shown in the footer; raise it with each upload
+  version: "1.19.0", // shown in the footer; raise it with each upload
 };
 
 // Search page wording
