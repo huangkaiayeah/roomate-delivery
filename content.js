@@ -5,7 +5,7 @@ const CONFIG = {
   city: "日本橫濱",
   parts: ["0719", "2829", "1106"], // tracking number pieces, in the same order as TASKS
   unlockAt: "2026-11-06T00:00:00+09:00", // midnight Japan time
-  version: "1.10.0", // shown in the footer; raise it with each upload
+  version: "1.14.0", // shown in the footer; raise it with each upload
 };
 
 // Search page wording
@@ -149,6 +149,7 @@ const STUDENT_CARD = {
     ending: "assets/meme-end.jpg",
     claim: "收下學生證",
     skip: "略過",
+    sound: "聲音", // the 🔊 / 🔇 button; browsers that block sound until a tap start muted
     endText: "人類拿去玩",
     replay: "再看一次動畫",
   },
@@ -358,13 +359,15 @@ const CARDS = [
   { key: "eat", emoji: "🥟", title: "eight 來eight 棒", text: "", img: "assets/gyoza-card.jpg", anim: "gyoza", unlock: "完成8包煎餃拼到底" },
   { key: "open", shadow: "assets/shadow-open.png", title: "壽桃塔卡", text: "福氣大禮包", img: "", anim: "peach", unlock: "完成急件開箱任務" },
   { key: "match", shadow: "assets/shadow-match.png", title: "中超style 三牲", text: "", img: "assets/sansheng-card.jpg", anim: "sansheng", unlock: "完成三牲連連看" },
-  { key: "chat", emoji: "🤖", title: "線上客服卡", text: "", img: "", unlock: "在行動郵局向廢話客服要一次提示" },
+  { key: "chat", shadow: "assets/shadow-chat.png", title: "線上客服卡", text: "", img: "", unlock: "在行動郵局向廢話客服要一次提示" },
   { key: "meme", shadow: "assets/shadow-meme.png", title: "炫炮學生證", text: "恭喜找到最酷炫的隱藏卡牌\n雖然完全刷不了，也不會被當成北大在學生\n但蚵仔煎洋芋片的貓咪很可愛❤️", unlock: "完成學生證補辦RPG" },
 ];
 
 // Mobile post: the hint robot. Scripted replies only, so it works with no server.
 const CHAT = {
   name: "廢話客服",
+  avatar: "assets/chat-avatar.png", // the bearded face beside its replies on the 線上客服卡
+  sound: "聲音", // the 🔊 / 🔇 button for the card's message sounds
   onlineHours: [8, 24], // Taiwan time, 24-hour clock. Outside these hours the page shows the queue instead. Use [0, 24] for always on.
   greeting: "您好，我是室友郵政の廢話客服💁‍♀️。卡關時建議點選[?]，或是輸入「提示」。", // [?] becomes the clickable hint icon
   chips: ["我要提示", "你到底寄了什麼？", "今年還有惡作劇嗎？"],

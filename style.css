@@ -99,6 +99,8 @@ form button, .btn { display: block; width: 100%; margin-top: 10px; padding: 10px
 @keyframes gz-ring-in { 0% { opacity: 0; scale: .2; } 60% { opacity: 1; scale: 1.25; } 100% { opacity: 1; scale: 1; } }
 .ss-card { position: relative; overflow: hidden; margin: 0 0 8px; container-type: inline-size; }
 .ss-card > img, .ss-card > canvas { display: block; width: 100%; }
+.card-sound { position: absolute; right: 2.5cqw; top: 2.2cqw; z-index: 2; padding: .6cqw 2.6cqw; font: inherit; font-size: 3.4cqw; color: var(--green-dark); background: #fff; border: 0; border-radius: 99px; cursor: pointer; }
+.card-sound[aria-pressed="false"] { color: #fff; background: var(--red); }
 .card-fallback { display: grid; place-items: center; min-height: 160px; font-size: 64px; }
 .stage3d { container-type: inline-size; position: relative; max-width: 420px; margin: 8px auto; overflow: hidden; border: 1px solid var(--line); min-height: 200px; }
 .stage3d canvas { display: block; width: 100%; height: auto; cursor: crosshair; }
@@ -301,6 +303,8 @@ form .clue-q, .clue-q { flex: none; width: 28px; height: 28px; margin: 0; paddin
 
 .cardform input[type="file"] { display: block; margin-top: 4px; font-weight: 400; }
 .meme { position: fixed; z-index: 20; inset: 0; overflow-y: auto; background: #e6e6e6; }
+.meme-sound { position: absolute; z-index: 2; left: 10px; top: 10px; padding: 4px 12px; font: inherit; font-size: 13px; color: var(--muted); background: #fff; border: 1px solid #bbb; border-radius: 14px; cursor: pointer; }
+.meme-sound[aria-pressed="false"] { color: #fff; background: var(--red); border-color: var(--red); }
 .meme-skip { position: absolute; z-index: 2; right: 10px; top: 10px; padding: 4px 12px; font: inherit; font-size: 13px; color: var(--muted); background: #fff; border: 1px solid #bbb; border-radius: 14px; cursor: pointer; }
 .meme.talking { background: #000; }
 .meme-talk { position: absolute; inset: 0; width: min(100%, 70.7vh); aspect-ratio: 1414 / 2000; margin: auto; overflow: hidden; container-type: inline-size; background: #000 center / 100% auto no-repeat; }

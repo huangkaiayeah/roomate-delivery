@@ -822,7 +822,32 @@ function GifWriter(w, h, fps) {
   this.finish = () => { byte(0x3b); return new Uint8Array(out); };
 }
 
-const pickMime = () => ["video/mp4;codecs=avc1.42E01E", "video/mp4", "video/webm;codecs=vp9", "video/webm"].find((t) => window.MediaRecorder && MediaRecorder.isTypeSupported(t));
+const pickMime = (audio = false) => [...(audio ? ["video/mp4;codecs=avc1.42E01E,mp4a.40.2", "video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus"] : []), "video/mp4;codecs=avc1.42E01E", "video/mp4", "video/webm;codecs=vp9", "video/webm"]
+  .find((t) => window.MediaRecorder && MediaRecorder.isTypeSupported(t));
+
+// Message sounds, made with Web Audio so there are no sound files: a pop when she sends,
+// a two-note ding when the 客服 answers, a soft thump when the seal lands.
+function cardSound(ac, out, kind) {
+  const at = ac.currentTime;
+  const tone = (freq, start, len, vol, to = 0) => {
+    const o = ac.createOscillator(), v = ac.createGain();
+    o.frequency.setValueAtTime(freq, at + start);
+    if (to) o.frequency.exponentialRampToValueAtTime(to, at + start + len);
+    v.gain.setValueAtTime(0.0001, at + start);
+    v.gain.exponentialRampToValueAtTime(vol, at + start + 0.012);
+    v.gain.exponentialRampToValueAtTime(0.0001, at + start + len);
+    o.connect(v).connect(out);
+    o.start(at + start);
+    o.stop(at + start + len + 0.02);
+  };
+  if (kind === "send") tone(520, 0, 0.1, 0.25, 980);
+  else if (kind === "reply") {
+    tone(880, 0, 0.2, 0.22);
+    tone(1320, 0.1, 0.3, 0.2);
+  } else if (kind === "stamp") tone(150, 0, 0.22, 0.6, 55);
+}
+// The sounds due between two moments of a card's timeline, in order.
+const soundsBetween = (src, a, b) => (src.sounds || []).filter(([at]) => at > a && at <= b).map(([, kind]) => kind);
 const easeInOut = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 const bumpAt = (t, a, b, c, d) => easeInOut((t - a) / (b - a)) * (1 - easeInOut((t - c) / (d - c)));
 const backOut = (t) => { const c = 2.2; return t >= 1 ? 1 : 1 + (c + 1) * (t - 1) ** 3 + c * (t - 1) ** 2; };
@@ -958,23 +983,154 @@ async function sanshengSource(width = 540) {
     });
     g.globalAlpha = 1;
   };
-  return { canvas, duration: LOOP, segment: [popAt - 200, popAt + 5 * GAP + 700], render };
+  return { canvas, duration: LOOP, segment: [popAt - 200, popAt + 5 * GAP + 700], still: 8000, render };
 }
 
-// The card on the page is the same drawing as the downloads, sized for the screen.
-async function playSansheng(holder) {
-  const src = await sanshengSource(Math.min(1400, holder.clientWidth * devicePixelRatio));
+// 線上客服卡: replays her chat with the 廢話客服 up to the 提示 she asked for, then the seal.
+function chatLog() {
+  const isAsk = (m) => m.me && CHAT.hintWords.some((w) => norm(m.text).includes(norm(w)));
+  const log = [{ text: CHAT.greeting }, ...S.chat], ask = log.findIndex(isAsk);
+  if (ask < 0) {                                            // no hint in the saved chat, e.g. a loaded progress file
+    const hint = !openTasks().length ? CHAT.allDone : S.current ? CHAT.taskHints[S.current] : CHAT.noTask;
+    return [log[0], { me: true, text: CHAT.chips[0] }, { text: hint }];
+  }
+  const upto = log.slice(0, ask + 2);
+  return upto.length > 9 ? [log[0], ...upto.slice(-8)] : upto; // the greeting, then the last few lines before the hint
+}
+
+async function chatSource(width = 540) {
+  const W = Math.round(width), H = Math.round(W * 1.3), canvas = newCanvas(W, H), g = canvas.getContext("2d");
+  const face = await loadImage(CHAT.avatar);
+  const drawFace = (cx, cy, d) => {                          // the bearded 客服 in a white circle
+    g.fillStyle = "#fff"; g.beginPath(); g.arc(cx, cy, d / 2, 0, Math.PI * 2); g.fill();
+    if (face) { const h = d * 0.88, w = (h * face.width) / face.height; g.drawImage(face, cx - w / 2, cy - h / 2, w, h); }
+  };
+  const head = 0.11 * W, pad = 0.035 * W, fs = 0.036 * W, lh = fs * 1.45, bp = 0.022 * W, maxW = 0.66 * W, av = 0.075 * W, gap = 0.024 * W;
+  const font = (weight, size) => `${weight} ${size}px "Noto Sans TC", sans-serif`;
+  g.font = font(400, fs);
+  const wrap = (text) => text.split("\n").flatMap((para) => {
+    const lines = [""];
+    for (const ch of para) {
+      // closing punctuation stays on the line it closes
+      if (g.measureText(lines[lines.length - 1] + ch).width > maxW - 2 * bp && lines[lines.length - 1] && !"」』）)。，、！？：；…".includes(ch)) lines.push("");
+      lines[lines.length - 1] += ch;
+    }
+    return lines;
+  });
+  // Lay out every bubble, then give each one its moment: the 客服 types for a moment before each reply.
+  let y = 0, t = 400;
+  const items = chatLog().map((m) => {
+    const lines = wrap(m.text.replace("[?]", "❔")), bw = Math.max(...lines.map((l) => g.measureText(l).width)) + 2 * bp, bh = lines.length * lh + 2 * bp;
+    const item = { me: !!m.me, lines, bw, bh, y };
+    if (m.me) item.at = t += 700;
+    else item.typing = t, item.at = t += 900;
+    t += m.me ? 300 : 500 + Math.min(2400, m.text.length * 45);
+    y += bh + gap;
+    return item;
+  });
+  const END = t, area = H - head - 2 * pad;
+  const bottom = (it, typing) => it.y + (typing ? 2 * bp + lh : it.bh);
+  // The log scrolls up as it fills, like the chat on the 行動郵局 page.
+  const moves = items.flatMap((it) => [...(it.me ? [] : [[it.typing, bottom(it, true)]]), [it.at, bottom(it)]]).map(([at, b]) => [at, Math.max(0, b - area)]);
+  const scrollAt = (time) => {
+    let from = 0, to = 0, at = 0;
+    for (const [when, s] of moves) if (when <= time) [from, to, at] = [to, s, when];
+    return from + (to - from) * easeInOut((time - at) / 350);
+  };
+  const bubble = (it, x, top, p) => {
+    g.save();
+    g.globalAlpha = Math.min(1, p * 2);
+    const s = 0.85 + 0.15 * easeInOut(p);
+    g.translate(it.me ? x + it.bw : x, top);
+    g.scale(s, s);
+    g.translate(it.me ? -it.bw : 0, 0);
+    g.fillStyle = it.me ? "#dff3df" : "#fff";
+    g.strokeStyle = it.me ? "#b8dfb8" : "#dddddd";
+    g.lineWidth = Math.max(1, W / 540);
+    g.beginPath(); g.roundRect(0, 0, it.bw, it.bh, 0.016 * W); g.fill(); g.stroke();
+    g.fillStyle = "#434343"; g.font = font(400, fs); g.textBaseline = "middle"; g.textAlign = "left";
+    it.lines.forEach((line, n) => g.fillText(line, bp, bp + lh * (n + 0.5)));
+    g.restore();
+  };
+  const render = (time) => {
+    g.fillStyle = "#f7f7f7"; g.fillRect(0, 0, W, H);
+    const scroll = scrollAt(time);
+    g.save();
+    g.beginPath(); g.rect(0, head, W, H - head); g.clip();
+    items.forEach((it) => {
+      const top = head + pad + it.y - scroll;
+      if (!it.me && time >= it.typing) drawFace(pad + av / 2, top + av / 2, av); // its face beside each of its lines
+      const x = it.me ? W - pad - it.bw : pad + av + 0.015 * W;
+      if (time >= it.at) bubble(it, x, top, Math.min(1, (time - it.at) / 220));
+      else if (!it.me && time >= it.typing) {                  // typing…
+        const dw = 0.13 * W, dh = 2 * bp + lh;
+        g.fillStyle = "#fff"; g.strokeStyle = "#dddddd"; g.lineWidth = Math.max(1, W / 540);
+        g.beginPath(); g.roundRect(x, top, dw, dh, 0.016 * W); g.fill(); g.stroke();
+        for (let d = 0; d < 3; d++) {
+          const bob = Math.sin((time - it.typing) / 140 - d * 0.9) * 0.008 * W;
+          g.fillStyle = "#9a9a9a"; g.beginPath(); g.arc(x + dw * (0.3 + d * 0.2), top + dh / 2 + bob, 0.009 * W, 0, Math.PI * 2); g.fill();
+        }
+      }
+    });
+    g.restore();
+    const grad = g.createLinearGradient(0, 0, 0, head);
+    grad.addColorStop(0, "#038c00"); grad.addColorStop(1, "#026b00");
+    g.fillStyle = grad; g.fillRect(0, 0, W, head);
+    g.fillStyle = "#fff"; g.font = font(700, 0.042 * W); g.textAlign = "left"; g.textBaseline = "middle";
+    drawFace(pad + head * 0.36, head / 2, head * 0.72);
+    g.fillText(CHAT.name, pad + head * 0.82, head / 2);
+    drawPostStamp(g, 0, 0, W, H, (time - END - 200) / 400);
+  };
+  const last = items[items.length - 1].at;
+  const sounds = [...items.map((it) => [it.at, it.me ? "send" : "reply"]), [END + 230, "stamp"]];
+  return { canvas, duration: END + 2800, segment: [last - 1100, last + 700], still: END + 1000, sounds, render };
+}
+
+// A card on the page is the same drawing as its downloads, sized for the screen.
+async function playCanvasCard(holder, makeSource) {
+  const src = await makeSource(Math.min(1400, holder.clientWidth * devicePixelRatio));
   src.canvas.setAttribute("role", "img");
   src.canvas.setAttribute("aria-label", holder.dataset.label);
   holder.replaceChildren(src.canvas);
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return src.render(8000);
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return src.render(src.still);
+  const sound = src.sounds && window.AudioContext ? cardSoundSwitch(holder) : null;
   const start = performance.now();
+  let last = 0;
   const frame = (now) => {
-    if (!src.canvas.isConnected) return;
-    src.render(now - start);
+    if (!src.canvas.isConnected) {
+      if (sound) sound.ac.close();
+      return;
+    }
+    const t = now - start, a = last % src.duration, b = t % src.duration;
+    if (sound && sound.on()) (b >= a ? soundsBetween(src, a, b) : [...soundsBetween(src, a, src.duration), ...soundsBetween(src, -1, b)]).forEach((kind) => cardSound(sound.ac, sound.ac.destination, kind));
+    last = t;
+    src.render(t);
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
+}
+
+// The 🔊 button on a card with sounds. Sounds play only while the card is on screen. A browser that keeps
+// sound off until a tap shows the button red; tapping it turns the sound on.
+function cardSoundSwitch(holder) {
+  const ac = new AudioContext();
+  holder.insertAdjacentHTML("beforeend", `<button type="button" class="card-sound" aria-pressed="true">🔊 ${CHAT.sound}</button>`);
+  const btn = holder.lastElementChild;
+  let wanted = true, seen = true;
+  const show = () => {
+    const on = wanted && ac.state === "running";
+    btn.textContent = `${on ? "🔊" : "🔇"} ${CHAT.sound}`;
+    btn.setAttribute("aria-pressed", String(on));
+  };
+  ac.resume().catch(() => {}).finally(show);
+  ac.onstatechange = show;
+  btn.onclick = () => {
+    wanted = btn.getAttribute("aria-pressed") !== "true";
+    if (wanted) ac.resume().catch(() => {});
+    show();
+  };
+  new IntersectionObserver(([e]) => (seen = e.isIntersecting)).observe(holder);
+  return { ac, on: () => wanted && seen && ac.state === "running" };
 }
 
 // 壽桃塔卡: a fresh 3D view that replays how she opened the box, from the first cut to the peach mountain.
@@ -1069,6 +1225,7 @@ async function cardSource(card) {
   if (card.anim === "sansheng") return sanshengSource();
   if (card.anim === "peach") return peachSource();
   if (card.key === "meme") return recordMeme(false, null, true);
+  if (card.key === "chat") return chatSource();
   throw new Error("not animated");
 }
 
@@ -1087,20 +1244,35 @@ async function makeGif(src, onProgress) {
 
 // Plays the given times onto a canvas in real time while recording it.
 async function makeVideo(src, times, onProgress) {
-  const mime = pickMime(), fps = 12;
+  const mime = pickMime(!!src.sounds), fps = 12;
   const w = Math.min(540, src.canvas.width), h = Math.round((w * src.canvas.height) / src.canvas.width), out = newCanvas(w, h), g = out.getContext("2d");
   if (!mime || !out.captureStream) throw new Error("no recorder");
   await src.render(times[0]); g.drawImage(src.canvas, 0, 0, w, h);
-  const rec = new MediaRecorder(out.captureStream(fps), { mimeType: mime, videoBitsPerSecond: 2500000 }), chunks = [];
+  const stream = out.captureStream(fps);
+  // A card with sounds records them too, played into the video rather than out loud. Played forward only.
+  const ac = src.sounds && window.AudioContext ? new AudioContext() : null, ear = ac && ac.createMediaStreamDestination();
+  if (ac) {
+    await ac.resume().catch(() => {});
+    if (ac.state === "running") ear.stream.getAudioTracks().forEach((track) => stream.addTrack(track));
+    // An inaudible hum keeps the sound track running between the sounds, so they stay in time with the picture.
+    const hum = ac.createConstantSource();
+    hum.offset.value = 0.0001;
+    hum.connect(ear);
+    hum.start();
+  }
+  const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2500000, audioBitsPerSecond: 96000 }), chunks = [];
   rec.ondataavailable = (e) => chunks.push(e.data);
   rec.start();
   for (let i = 0; i < times.length; i++) {
     await src.render(times[i]);
     g.drawImage(src.canvas, 0, 0, w, h);
+    if (ac && i > 0) soundsBetween(src, times[i - 1], times[i]).forEach((kind) => cardSound(ac, ear, kind));
     onProgress(i / times.length);
     await new Promise((r) => setTimeout(r, 1000 / fps));
   }
+  if (ac) await new Promise((r) => setTimeout(r, 400)); // let the last sound ring out
   await new Promise((r) => { rec.onstop = r; rec.stop(); });
+  if (ac) ac.close();
   return { blob: new Blob(chunks, { type: mime }), ext: mime.includes("mp4") ? "mp4" : "webm" };
 }
 const fullTimes = (src) => Array.from({ length: Math.round((src.duration / 1000) * 12) }, (_, i) => (i * 1000) / 12);
@@ -1132,6 +1304,7 @@ async function runDownload(btn) {
       let still = null;
       if (card.key === "meme") { const src = await cardSource(card); await src.render(2500); still = src.canvas.toDataURL("image/png"); }
       if (card.anim === "peach") still = await peachStill();
+      if (card.key === "chat") { const src = await chatSource(); src.render(src.still); still = src.canvas.toDataURL("image/png"); }
       await downloadCard(card, still);
     } else if (kind === "video" && card.key === "meme") {
       const { blob, ext } = await recordMeme(true, say);
@@ -1250,6 +1423,10 @@ function renderDownload() {
       return `<li class="pcard wide"><div class="stage3d card-stage" id="cardpeach"><span class="card-fallback">🍑</span></div><b>${c.title}</b><small>${c.text}</small>
         ${dlButtons(i)}</li>`;
     }
+    if (c.key === "chat") {
+      return `<li class="pcard wide"><div class="ss-card" id="chatcard" data-label="和${CHAT.name}的對話重播，最後問了提示"></div><b>${c.title}</b><small>${c.text}</small>
+        ${dlButtons(i)}</li>`;
+    }
     const pic = c.img ? `<img src="${c.img}" alt="">` : "";
     return `<li class="pcard"><div class="face">${pic || c.emoji || "✉"}</div><b>${c.title}</b><small>${c.text}</small>
       <button class="btn" data-i="${i}">下載卡片</button></li>`;
@@ -1262,7 +1439,8 @@ function renderDownload() {
   });
   if (document.getElementById("dlfront")) paintCardFront(document.getElementById("dlfront"));
   if (document.getElementById("gzcard")) playGyozaCard(document.getElementById("gzcard"));
-  if (document.getElementById("sscard")) playSansheng(document.getElementById("sscard")).catch(() => {});
+  if (document.getElementById("sscard")) playCanvasCard(document.getElementById("sscard"), sanshengSource).catch(() => {});
+  if (document.getElementById("chatcard")) playCanvasCard(document.getElementById("chatcard"), chatSource).catch(() => {});
   const peachEl = document.getElementById("cardpeach");
   if (peachEl) {
     loadThree().then(() => {
@@ -1609,6 +1787,7 @@ function playMeme() {
   overlay.id = "meme";
   overlay.innerHTML = `
     <button class="meme-skip" id="memeskip">${m.skip}</button>
+    <button class="meme-sound" id="memesound" aria-pressed="true">🔊 ${m.sound}</button>
     <div class="meme-talk" id="memetalk" style="background-image:url(${m.background})">
       <div class="meme-bubble" id="memebubble" role="status"></div>
       <div class="meme-cards" id="memecards"></div>
@@ -1622,7 +1801,6 @@ function playMeme() {
   const cats = {};
   overlay.querySelectorAll(".meme-cat").forEach((canvas) => {
     const v = document.createElement("video");
-    v.muted = true;
     v.loop = true;
     v.playsInline = true;
     v.preload = "auto";
@@ -1643,8 +1821,33 @@ function playMeme() {
   };
   requestAnimationFrame(paintCats);
 
+  // The cats talk with sound. A browser that blocks sound until a tap gets the cat muted, so it still moves,
+  // and the button turns red; tapping it turns the sound on for every cat.
+  let active = null;
+  const soundBtn = document.getElementById("memesound");
+  const showSound = (on) => {
+    soundBtn.textContent = `${on ? "🔊" : "🔇"} ${m.sound}`;
+    soundBtn.setAttribute("aria-pressed", String(on));
+  };
+  const play = (v) => v.play().catch(() => {
+    v.muted = true;
+    showSound(false);
+    return v.play().catch(() => {});
+  });
+  soundBtn.onclick = () => {
+    const on = soundBtn.getAttribute("aria-pressed") !== "true";
+    showSound(on);
+    Object.entries(cats).forEach(([who, cat]) => {
+      cat.v.muted = !on;
+      if (!on) return;
+      if (who === active) cat.v.play().catch(() => {});
+      else cat.v.play().then(() => who !== active && cat.v.pause(), () => {}); // played once from a tap, the browser allows its sound later
+    });
+  };
+
   const finish = () => {
     clearTimeout(memeTimer);
+    Object.values(cats).forEach((cat) => cat.v.pause());
     overlay.remove();
     if (!c.memeSeen) {
       c.memeSeen = true;
@@ -1664,6 +1867,7 @@ function playMeme() {
     paintCardFront(document.getElementById("card3dfront"));
     document.getElementById("memeclaim").onclick = finish;
     document.getElementById("memeskip").hidden = true;
+    soundBtn.hidden = true;
   };
   const showApplication = () => {
     document.getElementById("memetalk").remove();
@@ -1681,11 +1885,11 @@ function playMeme() {
     bubble.className = `meme-bubble from-${step.who}`;
     document.getElementById("memecards").className = `meme-cards from-${step.who}`;
     document.getElementById("memecards").innerHTML = step.cards.map((k) => `<img src="${sc.backs[k].img}" alt="學生證${sc.backs[k].name}">`).join("");
-    const active = step.clip || step.who;
+    active = step.clip || step.who;
     Object.entries(cats).forEach(([who, cat]) => {
       if (who === active) {
         if (cat.v.paused && step.clip) cat.v.currentTime = 0; // starts from the top, stays running across its lines
-        cat.v.play().catch(() => {});
+        play(cat.v);
       } else {
         cat.v.pause();
       }
@@ -1771,7 +1975,16 @@ function renderDormVote() {
 // Draws the sequence on a canvas and records it in real time, so a 30-second animation takes 30 seconds to make.
 async function recordMeme(full, onProgress, asSource = false) {
   const c = S.card, sc = STUDENT_CARD, m = sc.meme, W = 566, H = 800;
-  const mime = ["video/mp4;codecs=avc1.42E01E", "video/mp4", "video/webm;codecs=vp9", "video/webm"].find((t) => window.MediaRecorder && MediaRecorder.isTypeSupported(t));
+  // The full video carries the cats' sound, so it asks for a format with audio first.
+  const mime = [...(full ? ["video/mp4;codecs=avc1.42E01E,mp4a.40.2", "video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus"] : []), "video/mp4;codecs=avc1.42E01E", "video/mp4", "video/webm;codecs=vp9", "video/webm"]
+    .find((t) => window.MediaRecorder && MediaRecorder.isTypeSupported(t));
+  // The cats' sound is routed into the recording through Web Audio, not out of the speakers.
+  const audio = full && !asSource && window.AudioContext ? new AudioContext() : null;
+  const sound = audio && audio.createMediaStreamDestination();
+  const playCat = (v) => v.play().catch(() => {
+    v.muted = true; // blocked with sound: the cat still moves, the video is just quieter
+    return v.play().catch(() => {});
+  });
   const canvas = document.createElement("canvas");
   if (!asSource && (!mime || !canvas.captureStream)) throw new Error("no recorder");
   canvas.width = W;
@@ -1787,17 +2000,18 @@ async function recordMeme(full, onProgress, asSource = false) {
   if (full) {
     await Promise.all([["left", 270], ["right", 270], ["what", 270], ["fight", 360]].map(([who, cw]) => new Promise((ok) => {
       const v = document.createElement("video");
-      v.muted = true;
+      v.muted = !sound;
       v.loop = true;
       v.playsInline = true;
       v.src = m[who];
+      if (sound) audio.createMediaElementSource(v).connect(sound);
       const layer = document.createElement("canvas");
       layer.width = cw;
       layer.height = 360;
       cats[who] = { v, layer };
       // A video that hasn't played has no picture to copy yet, so run each one briefly.
       const ready = async () => {
-        await v.play().catch(() => {});
+        await playCat(v);
         await new Promise((wait) => setTimeout(wait, 200));
         v.pause();
         keyGreen(v, layer);
@@ -1920,7 +2134,12 @@ async function recordMeme(full, onProgress, asSource = false) {
   const appMs = full ? MEME_APP_MS : 0, total = talkMs + appMs + MEME_END_MS;
   if (full) drawTalk(steps[0]);
   else drawEnding(0);
-  const rec = new MediaRecorder(canvas.captureStream(24), { mimeType: mime, videoBitsPerSecond: 2500000 });
+  const stream = canvas.captureStream(24);
+  if (sound) {
+    await audio.resume().catch(() => {});
+    if (audio.state === "running") sound.stream.getAudioTracks().forEach((track) => stream.addTrack(track));
+  }
+  const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2500000, audioBitsPerSecond: 96000 });
   const chunks = [];
   rec.ondataavailable = (e) => chunks.push(e.data);
   return new Promise((ok, no) => {
@@ -1934,6 +2153,7 @@ async function recordMeme(full, onProgress, asSource = false) {
       if (t >= total) {
         Object.values(cats).forEach((cat) => cat.v.pause());
         rec.stop();
+        if (audio) audio.close();
         return;
       }
       onProgress(t / total);
@@ -1946,7 +2166,7 @@ async function recordMeme(full, onProgress, asSource = false) {
           Object.entries(cats).forEach(([who, cat]) => {
             if (who === active) {
               if (cat.v.paused && step.clip) cat.v.currentTime = 0;
-              cat.v.play().catch(() => {});
+              playCat(cat.v);
             } else {
               cat.v.pause();
             }
